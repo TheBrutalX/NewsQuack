@@ -1,0 +1,52 @@
+# =============================================================================
+# Newsquack — .NET 10 / C# / Docker / WSL+Windows
+# =============================================================================
+
+# ── Build output ───────────────────────────────────────────────────────────────
+bin/
+obj/
+artifacts/            # redirected publish/test output (dotnet -o artifacts/…)
+
+# ── IDE & user files ───────────────────────────────────────────────────────────
+*.user                # per-user VS settings (window state, breakpoints)
+*.suo                 # Visual Studio solution user options
+.vs/                  # Visual Studio workspace cache
+.idea/                # JetBrains Rider / IntelliJ
+
+# VS Code: we DO version launch.json and tasks.json so every dev (and subagent)
+# gets the same build/test/debug setup out of the box; everything else in
+# .vscode/ is personal (settings, extensions) and stays local.
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# ── Test results & coverage ────────────────────────────────────────────────────
+TestResults/          # VSTest / coverlet run output
+coverage.cobertura.xml
+coverage.opencover.xml
+*.info                # coverlet speedscope/vs-coverage sidecar files
+
+# ── Runtime data (NEVER commit state) ──────────────────────────────────────────
+# The container mounts /data for the SQLite database; local dev runs use ./data.
+# WAL/SHM are sidecar files of the DB — they must never be committed on their own.
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# ── Local config with secrets ──────────────────────────────────────────────────
+# appsettings.json is the documented, secret-free base (committed).
+# Per-machine overrides — webhook tokens, API keys — go in *.local.json files.
+appsettings.*.local.json
+
+# ── Publish artifacts ──────────────────────────────────────────────────────────
+publish/
+
+# ── OS & editor temp files (WSL + Windows) ─────────────────────────────────────
+.DS_Store             # macOS (harmless, kept for completeness)
+Thumbs.db             # Windows Explorer cache
+desktop.ini           # Windows folder metadata
+*.swp                 # Vim swap files
+*~                    # editor backup files
