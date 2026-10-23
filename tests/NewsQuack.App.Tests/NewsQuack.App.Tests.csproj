@@ -30,6 +30,9 @@
   <ItemGroup>
     <!-- Transitively brings NewsQuack.Core, NewsQuack.Infrastructure (and the EF Core SQLite provider). -->
     <ProjectReference Include="../../src/NewsQuack.App/NewsQuack.App.csproj" />
+    <!-- T-042: matrix cell runner — its dll + runtimeconfig are copied next to the test assembly so cells can be
+         launched as child processes via `dotnet exec`. -->
+    <ProjectReference Include="../TzCellRunner/TzCellRunner.csproj" />
   </ItemGroup>
 
 </Project>
