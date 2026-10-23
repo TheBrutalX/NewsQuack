@@ -32,6 +32,7 @@ public class EnvOverrideBootTests
                 psi.WorkingDirectory = dir;
                 psi.Environment["NEWSQUACK_INSTANCES__0__DISCORD__WEBHOOKURL"] = ConfigTestHelper.WebhookUrl;
                 psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture);
+                psi.Environment["NEWSQUACK_DATABASE"] = Path.Combine(dir, "newsquack.db");   // T-015: startup migration needs a writable DB (no /data in CI)
             });
 
             Assert.False(boot.Process.WaitForExit(10_000), "host exited right after startup — expected it to keep running (the env override should have won over the file value)");

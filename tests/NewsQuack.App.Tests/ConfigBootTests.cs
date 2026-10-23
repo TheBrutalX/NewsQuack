@@ -78,7 +78,11 @@ public class ConfigBootTests
 
             // T-030: the health listener is enabled by default — pin a unique port so parallel boot tests do not collide on 8081.
             var port = AppBootHelper.GetFreePort();
-            using var boot = AppBootHelper.StartApp(dotnet, appAssembly, [configFile], psi => psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture));
+            using var boot = AppBootHelper.StartApp(dotnet, appAssembly, [configFile], psi =>
+            {
+                psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture);
+                psi.Environment["NEWSQUACK_DATABASE"] = Path.Combine(dir, "newsquack.db");   // T-015: startup migration needs a writable DB (no /data in CI)
+            });
 
             Assert.False(boot.Process.WaitForExit(10_000), "host exited right after startup — expected it to keep running");
             boot.Process.Kill(entireProcessTree: true);

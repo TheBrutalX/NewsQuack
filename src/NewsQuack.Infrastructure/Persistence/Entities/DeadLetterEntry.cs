@@ -1,6 +1,6 @@
 namespace NewsQuack.Infrastructure.Persistence.Entities;
 
-/// <summary>Persistent dead-letter for posts that exhausted their retry attempts.</summary>
+/// <summary>Persistent dead-letter for posts that exhausted their retry attempts. Date properties are UTC DateTime — the EF Core SQLite provider cannot translate DateTimeOffset in WHERE/ORDER BY.</summary>
 public class DeadLetterEntry
 {
     public long Id { get; set; }
@@ -11,5 +11,7 @@ public class DeadLetterEntry
     public int Attempts { get; set; }
     public string ErrorCategory { get; set; } = null!;    // "429" / "5xx" / "timeout" / "400-payload"
     public string? LastError { get; set; }
-    public DateTimeOffset FailedAtUtc { get; set; }
+
+    /// <summary>UTC instant (store converts at the boundary).</summary>
+    public DateTime FailedAtUtc { get; set; }
 }

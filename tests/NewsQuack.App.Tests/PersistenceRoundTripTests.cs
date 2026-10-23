@@ -14,6 +14,9 @@ public class PersistenceRoundTripTests
 {
     private static readonly DateTimeOffset FixedUtc = new(2026, 10, 23, 12, 0, 0, TimeSpan.Zero);
 
+    // T-015: entity date properties are UTC DateTime (the EF Core SQLite provider cannot translate DateTimeOffset in queries) — the persisted form of FixedUtc.
+    private static readonly DateTime FixedUtcPersisted = FixedUtc.UtcDateTime;
+
     [Fact]
     public void Persistence_SaveAllFiveEntities_RoundTripsValues()
     {
@@ -35,26 +38,26 @@ public class PersistenceRoundTripTests
                 context.DeliveredItems.Add(new DeliveredItem
                 {
                     InstanceId = "instance-1", ItemId = "item-1", FeedUrl = "https://example.com/feed.xml",
-                    Title = "title", DeliveredAtUtc = FixedUtc,
+                    Title = "title", DeliveredAtUtc = FixedUtcPersisted,   // T-015: persisted as UTC DateTime
                 });
                 context.FeedStateRows.Add(new FeedStateRow
                 {
-                    FeedUrl = "https://example.com/feed.xml", LastItemPublishedAtUtc = FixedUtc, Etag = "etag-1",
-                    LastFetchedAtUtc = FixedUtc.AddHours(-1), ErrorCount = 2, LastErrorAtUtc = FixedUtc.AddMinutes(-5),
+                    FeedUrl = "https://example.com/feed.xml", LastItemPublishedAtUtc = FixedUtcPersisted, Etag = "etag-1",
+                    LastFetchedAtUtc = FixedUtc.AddHours(-1).UtcDateTime, ErrorCount = 2, LastErrorAtUtc = FixedUtc.AddMinutes(-5).UtcDateTime,
                 });
                 context.YoutubeChannelCacheEntries.Add(new YoutubeChannelCacheEntry
                 {
                     ChannelUrl = "https://www.youtube.com/channel/UCd9fKqLmNpRsTuVwXyZaBcD",
-                    LastCheckedAtUtc = FixedUtc, LastVideoPublishedAtUtc = FixedUtc.AddDays(-1),
+                    LastCheckedAtUtc = FixedUtcPersisted, LastVideoPublishedAtUtc = FixedUtc.AddDays(-1).UtcDateTime,
                 });
                 context.ImageCacheEntries.Add(new ImageCacheEntry
                 {
-                    Url = "https://example.com/img/original.png", ResolvedUrl = "https://cdn.example.com/img/resolved.png", CachedAtUtc = FixedUtc,
+                    Url = "https://example.com/img/original.png", ResolvedUrl = "https://cdn.example.com/img/resolved.png", CachedAtUtc = FixedUtcPersisted,
                 });
                 context.DeadLetterEntries.Add(new DeadLetterEntry
                 {
                     InstanceId = "instance-1", FeedUrl = "https://example.com/feed.xml", ItemId = "item-2",
-                    PayloadJson = "{\"itemId\":\"item-2\"}", Attempts = 5, ErrorCategory = "429", LastError = "rate limited", FailedAtUtc = FixedUtc,
+                    PayloadJson = "{\"itemId\":\"item-2\"}", Attempts = 5, ErrorCategory = "429", LastError = "rate limited", FailedAtUtc = FixedUtcPersisted,
                 });
 
                 context.SaveChanges();
@@ -66,14 +69,14 @@ public class PersistenceRoundTripTests
                 Assert.True(delivered.Id >= 1);   // rowid assigned by SQLite on insert
                 Assert.Equal("instance-1", delivered.InstanceId);
                 Assert.Equal("item-1", delivered.ItemId);
-                Assert.Equal(FixedUtc, delivered.DeliveredAtUtc);
+                Assert.Equal(FixedUtcPersisted, delivered.DeliveredAtUtc);   // T-015: round-trips as UTC DateTime
 
                 var feedState = context.FeedStateRows.Single();
                 Assert.Equal("etag-1", feedState.Etag);
                 Assert.Equal(2, feedState.ErrorCount);
 
                 var channel = context.YoutubeChannelCacheEntries.Single();
-                Assert.Equal(FixedUtc.AddDays(-1), channel.LastVideoPublishedAtUtc);
+                Assert.Equal(FixedUtc.AddDays(-1).UtcDateTime, channel.LastVideoPublishedAtUtc);   // T-015: round-trips as UTC DateTime
 
                 var image = context.ImageCacheEntries.Single();
                 Assert.Equal("https://cdn.example.com/img/resolved.png", image.ResolvedUrl);

@@ -28,7 +28,7 @@ public class HealthEndpointBootTests
             var json = $$"""{ "Instances": [ {{ConfigTestHelper.Instance("main", 15)}} ] }""";
             var configFile = AppBootHelper.WriteFile(dir, "newsquack.json", json);
 
-            using var boot = StartAppOnHealthPort(dotnet, appAssembly, configFile, port);
+            using var boot = StartAppOnHealthPort(dotnet, appAssembly, configFile, port, Path.Combine(dir, "newsquack.db"));
 
             try
             {
@@ -63,7 +63,7 @@ public class HealthEndpointBootTests
     }
 
     [Fact]
-    public async Task Readyz_NoRequirementsRegistered_Returns200Ready()
+    public async Task Readyz_StoreMigratedAtBoot_Returns200Ready()
     {
         var (dotnet, appAssembly) = AppBootHelper.FindApp();
         if (dotnet is null || appAssembly is null) return;   // no dotnet on PATH or no App build output — cannot run end-to-end
@@ -76,14 +76,15 @@ public class HealthEndpointBootTests
             var json = $$"""{ "Instances": [ {{ConfigTestHelper.Instance("main", 15)}} ] }""";
             var configFile = AppBootHelper.WriteFile(dir, "newsquack.json", json);
 
-            using var boot = StartAppOnHealthPort(dotnet, appAssembly, configFile, port);
+            using var boot = StartAppOnHealthPort(dotnet, appAssembly, configFile, port, Path.Combine(dir, "newsquack.db"));
 
             try
             {
                 using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
                 await WaitForListenerAsync(boot, http, port);
 
-                // T-030 registers no requirements — /readyz passes as soon as the listener is up (config validity is implied).
+                // T-015 registers the "store" requirement at wiring time and marks it ready after the startup migration — the migration runs
+                // before Kestrel starts answering, so /readyz passes as soon as the listener is up.
                 using var response = await http.GetAsync("/readyz");
                 Assert.Equal(HttpStatusCode.OK, response.StatusCode);
                 Assert.StartsWith("application/json", response.Content.Headers.ContentType?.MediaType ?? "");
@@ -126,6 +127,7 @@ public class HealthEndpointBootTests
             {
                 psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture);
                 psi.Environment["NEWSQUACK_HEALTH__ENABLED"] = "false";   // T-003 env override — the listener must not come up at all
+                psi.Environment["NEWSQUACK_DATABASE"] = Path.Combine(dir, "newsquack.db");   // T-015: startup migration needs a writable DB (no /data in CI)
             });
 
             try
@@ -177,7 +179,8 @@ public class HealthEndpointBootTests
             var json = $$"""{ "Instances": [ {{ConfigTestHelper.Instance("main", 15)}} ] }""";
             var configFile = AppBootHelper.WriteFile(dir, "newsquack.json", json);
 
-            using var boot = StartAppOnHealthPort(dotnet, appAssembly, configFile, port);
+            // T-015: the startup migration must succeed first — the exit-1 under test is the Kestrel bind failure, not store init.
+            using var boot = StartAppOnHealthPort(dotnet, appAssembly, configFile, port, Path.Combine(dir, "newsquack.db"));
 
             Assert.True(boot.Process.WaitForExit((int)StartTimeout.TotalMilliseconds), "app did not exit within the timeout — expected a bind failure");
             Assert.Equal(1, boot.Process.ExitCode);
@@ -203,9 +206,16 @@ public class HealthEndpointBootTests
         }
     }
 
-    /// <summary>Starts the app with NEWSQUACK_HEALTH__PORT pointing at the given port (T-003's env override).</summary>
-    private static AppBoot StartAppOnHealthPort(string dotnet, string appAssembly, string configFile, int port) =>
-        AppBootHelper.StartApp(dotnet, appAssembly, [configFile], psi => psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture));
+    /// <summary>
+    /// Starts the app with NEWSQUACK_HEALTH__PORT pointing at the given port (T-003's env override) and NEWSQUACK_DATABASE pointing at a temp
+    /// file (T-015: the startup migration needs a writable database — /data does not exist in CI or on non-root dev machines).
+    /// </summary>
+    private static AppBoot StartAppOnHealthPort(string dotnet, string appAssembly, string configFile, int port, string dbFile) =>
+        AppBootHelper.StartApp(dotnet, appAssembly, [configFile], psi =>
+        {
+            psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture);
+            psi.Environment["NEWSQUACK_DATABASE"] = dbFile;
+        });
 
     /// <summary>Polls /healthz until Kestrel answers (any response means the listener is up — it always returns 200).</summary>
     private static async Task WaitForListenerAsync(AppBoot boot, HttpClient http, int port)

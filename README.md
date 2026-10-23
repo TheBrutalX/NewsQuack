@@ -24,6 +24,7 @@ Every value of the v2 config schema can be overridden from an environment variab
 | Env var | Overrides | Default when omitted |
 |---|---|---|
 | `NEWSQUACK_CONFIG` | config file *location* (not a value override) | first found of: CLI argument, `./newsquack.json`, `/config/newsquack.json` |
+| `NEWSQUACK_DATABASE` | SQLite database file *path* (not a value override) — the state store migrates it at boot; its parent directory is created when missing | `/data/newsquack.db` (Docker mount point) |
 | `NEWSQUACK_HTTP__FEEDTIMEOUTSECONDS` | `Http.FeedTimeoutSeconds` — feed fetch timeout in seconds (> 0) | 30 |
 | `NEWSQUACK_HTTP__DISCORDTIMEOUTSECONDS` | `Http.DiscordTimeoutSeconds` — Discord send timeout in seconds (> 0) | 15 |
 | `NEWSQUACK_HTTP__IMAGETIMEOUTSECONDS` | `Http.ImageTimeoutSeconds` — image fetch timeout in seconds (> 0) | 15 |
