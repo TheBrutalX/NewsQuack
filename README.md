@@ -4,9 +4,9 @@
 
 A self-hosted .NET 10 service that polls RSS/Atom feeds and YouTube channels and delivers every new post to pluggable notification targets (Discord in v1.0), with reliable at-least-once delivery, persistent item-ID dedup and a stage-based post pipeline. Newsquack is an improved reimplementation of [NewsQuack](https://github.com/NewsQuack).
 
-## Status: PLANNING
+## Status: DEVELOPMENT (M1 in progress)
 
-No code yet — this repository currently holds only the development process and conventions. The full architecture plan and work breakdown live outside the repo (`~/newsquack-analysis/`); they enter this repository as per-task files when development starts.
+Development is underway on milestone M1 (v1.x). Implemented so far: the solution scaffold, test infrastructure and CI; the v2 config schema with boot-time total validation and friendly error messages; and environment variable overrides for every config value (below). Polling, delivery and the Discord target land in later tasks of this milestone.
 
 ## Where to look
 
@@ -16,3 +16,59 @@ No code yet — this repository currently holds only the development process and
 | [`docs/PROCESS.md`](docs/PROCESS.md) | Everyone — branch model, task lifecycle, GitHub tracking, commit convention (full detail + rationale) |
 | [`docs/TASK-TEMPLATE.md`](docs/TASK-TEMPLATE.md) | Coordinator — template for planning every task in `tasks/` |
 | [`.github/pull_request_template.md`](.github/pull_request_template.md) | Everyone — PR format (task, impact & risk, testing, checklist) |
+
+## Environment variables
+
+Every value of the v2 config schema can be overridden from an environment variable, and **environment variables always win over the config file**. The naming scheme is frozen: prefix `NEWSQUACK_`, sections separated by `__` (double underscore), list entries addressed by **numeric index** — the standard .NET JSON + environment configuration pipeline.
+
+| Env var | Overrides | Default when omitted |
+|---|---|---|
+| `NEWSQUACK_CONFIG` | config file *location* (not a value override) | first found of: CLI argument, `./newsquack.json`, `/config/newsquack.json` |
+| `NEWSQUACK_HTTP__FEEDTIMEOUTSECONDS` | `Http.FeedTimeoutSeconds` — feed fetch timeout in seconds (> 0) | 30 |
+| `NEWSQUACK_HTTP__DISCORDTIMEOUTSECONDS` | `Http.DiscordTimeoutSeconds` — Discord send timeout in seconds (> 0) | 15 |
+| `NEWSQUACK_HTTP__IMAGETIMEOUTSECONDS` | `Http.ImageTimeoutSeconds` — image fetch timeout in seconds (> 0) | 15 |
+| `NEWSQUACK_HTTP__BLOCKPRIVATENETWORKREDIRECTS` | `Http.BlockPrivateNetworkRedirects` — anti-SSRF switch (`true`/`false`) | false |
+| `NEWSQUACK_HEALTH__ENABLED` | `Health.Enabled` — health endpoint on/off (`true`/`false`) | true |
+| `NEWSQUACK_HEALTH__PORT` | `Health.Port` — health endpoint TCP port (1..65535) | 8081 |
+| `NEWSQUACK_LOGGING__LEVEL` | `Logging.Level` — `Trace` / `Debug` / `Information` / `Warning` / `Error` / `Critical` (case-insensitive) | Information |
+| `NEWSQUACK_INSTANCES__<i>__ID` | `Instances[<i>].Id` — instance id (required, unique) | — (no default) |
+| `NEWSQUACK_INSTANCES__<i>__CHECKINTERVALMINUTES` | `Instances[<i>].CheckIntervalMinutes` — poll interval in minutes (1..1440, required) | — (no default) |
+| `NEWSQUACK_INSTANCES__<i>__FEEDS__<j>__URL` | `Instances[<i>].Feeds[<j>].Url` — feed URL, http(s) with host (required, at least one per instance) | — (no default) |
+| `NEWSQUACK_INSTANCES__<i>__DISCORD__WEBHOOKURL` | `Instances[<i>].Discord.WebhookUrl` — Discord webhook URL (required) | — (no default) |
+| `NEWSQUACK_INSTANCES__<i>__DISCORD__MODE` | `Instances[<i>].Discord.Mode` — `embed` / `forum` / `markdown` (case-insensitive) | embed |
+| `NEWSQUACK_INSTANCES__<i>__DISCORD__COLOR` | `Instances[<i>].Discord.Color` — Discord embed color, 0..16777215 (optional) | — (omitted) |
+| `NEWSQUACK_INSTANCES__<i>__DISCORD__FALLBACKIMAGEURL` | `Instances[<i>].Discord.FallbackImageUrl` — http(s) fallback image URL (optional) | — (omitted) |
+
+### Instance addressing is by index, not by Id
+
+If the file defines instances `[a, b]`, then `NEWSQUACK_INSTANCES__0__…` targets instance `a` and `NEWSQUACK_INSTANCES__1__…` targets instance `b` — regardless of their `Id`s. An index beyond the file's list creates a new (mostly empty) instance that fails validation until its required keys are provided.
+
+### Empty values mean "not set"
+
+An environment variable set to an empty string is treated as *not set*: the config file value (or schema default) wins. A wrong-typed value (e.g. `NEWSQUACK_HEALTH__PORT=abc`) surfaces as a friendly validation error naming the config path — not a crash or stack trace.
+
+### Webhook tokens are masked in every error message
+
+The last path segment of a Discord webhook URL (`<token>`) is a secret: any error message that echoes a webhook URL renders it as `https://discord.com/api/webhooks/<id>/…` plus only the **last 4 characters** of the token — e.g.
+
+```
+Instances[0].Discord.WebhookUrl: Must be a Discord webhook URL of the form https://discord.com/api/webhooks/<id>/<token> (got 'https://discord.com/api/webhooks/123456789012345678/…UvWx').
+```
+
+Feed URLs and image URLs are not secrets and are printed as-is.
+
+### Env vars cannot replace a missing file (v1.0)
+
+The config file must exist; env vars override values inside it, they do not provide the whole config on their own. (An env var at an index beyond the file's instance list creates a sparse instance that fails validation — see above.)
+
+### Docker: webhook in env only
+
+```bash
+docker run -d \
+  --name newsquack \
+  -v /host/path/newsquack.json:/config/newsquack.json \
+  -e NEWSQUACK_INSTANCES__0__DISCORD__WEBHOOKURL="https://discord.com/api/webhooks/123456789012345678/AbCdEfGhIjKlMnOpQrStUvWx" \
+  thebrutalx/newsquack
+```
+
+The mounted `newsquack.json` then contains no secret at all — the webhook URL lives only in the environment.

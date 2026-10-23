@@ -11,17 +11,20 @@ internal static class ConfigTestHelper
     /// <summary>A plain feed URL that satisfies the http(s)-with-host rule.</summary>
     public const string FeedUrl = "https://example.com/feed.xml";
 
-    /// <summary>Materializes the JSON to a temp file and runs ConfigLoader.LoadAndValidate on it (the full boot path minus stderr/exit).</summary>
-    public static ConfigLoadResult Load(string json)
+    /// <summary>Materializes the JSON to a temp file and runs ConfigLoader.LoadAndValidate on it (the full boot path minus stderr/exit), with no NEWSQUACK_* env vars set.</summary>
+    public static ConfigLoadResult Load(string json) => LoadWithEnv(json, new Dictionary<string, string?>());
+
+    /// <summary>Materializes the JSON to a temp file and runs loader + validator with an explicit env-var snapshot (T-003 value overrides).</summary>
+    public static ConfigLoadResult LoadWithEnv(string json, IReadOnlyDictionary<string, string?> environmentVariables)
     {
-        var dir = Path.Combine(Path.GetTempPath(), $"newsquack-t002-{Guid.NewGuid():N}");
+        var dir = Path.Combine(Path.GetTempPath(), $"newsquack-t003-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
         var file = Path.Combine(dir, "newsquack.json");
 
         try
         {
             File.WriteAllText(file, json);
-            return ConfigLoader.LoadAndValidate(file);
+            return ConfigLoader.LoadAndValidate(file, environmentVariables);
         }
         finally
         {
