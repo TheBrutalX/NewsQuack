@@ -1,4 +1,5 @@
 using NewsQuack.App.Configuration;
+using NewsQuack.App.Fetching;             // T-010: feed fetcher + global throttle + UA cascade + robots handling
 using NewsQuack.App.Health;
 using NewsQuack.App.Http;                 // T-005: named HTTP clients + anti-SSRF redirect handler
 using NewsQuack.App.Logging;
@@ -46,6 +47,8 @@ if (health.Enabled)
     // handler in every pipeline — "discord" is what T-020's target resolves. One wiring method for both host paths.
     webBuilder.Services.AddNewsquackHttpClients(config.Http);
 
+    webBuilder.Services.AddFeedFetching();   // T-010: the fetch layer on top of the named clients (same wiring as the generic host path)
+
     ApplyJsonLogging(webBuilder.Services, webBuilder.Logging, config);   // T-030: re-apply T-004's JSON-on-stdout setup — WebApplication's default providers would clobber it
     webBuilder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(health.Port));
 
@@ -90,6 +93,8 @@ else
 
     // T-005: exactly the wiring of the health path above — both hosts get the three named clients with config timeouts and the shared handler.
     builder.Services.AddNewsquackHttpClients(config.Http);
+
+    builder.Services.AddFeedFetching();   // T-010: exactly the fetch-layer wiring of the health path above
 
     ApplyJsonLogging(builder.Services, builder.Logging, config);
 
