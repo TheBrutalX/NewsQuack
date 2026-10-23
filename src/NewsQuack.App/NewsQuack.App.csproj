@@ -12,6 +12,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- T-012: primary feed parser (ReadFromString). Version centralized in Directory.Packages.props. -->
+    <PackageReference Include="CodeHollow.FeedReader" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../NewsQuack.Core/NewsQuack.Core.csproj" />
     <ProjectReference Include="../NewsQuack.Infrastructure/NewsQuack.Infrastructure.csproj" />
   </ItemGroup>

@@ -8,6 +8,10 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13" />
 
+    <!-- T-012: feed XML parsing (primary pass). Zero transitive dependencies on netcoreapp — coordinator decision 1 kept
+         CodeHollow over the Sagara fork precisely to avoid adding an HTTP resilience layer that overlaps our own design. -->
+    <PackageVersion Include="CodeHollow.FeedReader" Version="1.2.6" />
+
     <!-- Test tooling (xUnit v2 + VSTest). -->
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
