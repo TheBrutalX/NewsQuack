@@ -15,5 +15,13 @@
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+
+    <!-- HTTP-level test wiring (self-hosted mock server on dynamic ports). -->
+    <PackageVersion Include="WireMock.Net" Version="2.19.0" />
+
+    <!-- Coverage: coverlet.collector is the VSTest data collector; coverlet.msbuild emits the report and
+         enforces the per-project Threshold on every `dotnet test` (same version line for both). -->
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
+    <PackageVersion Include="coverlet.msbuild" Version="10.1.0" />
   </ItemGroup>
 </Project>

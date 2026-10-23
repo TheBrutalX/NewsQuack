@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Atom fixture: 4 entries with explicit UTC offsets in both 'Z' and '+02:00' forms,
+     html-typed content with entities, feed-level and entry-level authors. -->
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Open Source Weekly</title>
+  <link href="https://example.org/blog" rel="alternate" type="text/html"/>
+  <id>urn:uuid:9f1c6a4e-7d2b-4e8a-b3c5-6a0d1e2f3b4c</id>
+  <updated>2025-10-21T17:45:33+02:00</updated>
+  <author>
+    <name>Maria Weber</name>
+    <uri>https://example.org/maria</uri>
+  </author>
+  <entry>
+    <title>Shipping &amp; testing in parallel</title>
+    <link href="https://example.org/blog/shipping-testing" rel="alternate" type="text/html"/>
+    <id>urn:uuid:1a2b3c4d-0001-4f5e-9a8b-7c6d5e4f3a2b</id>
+    <published>2025-10-21T14:30:00Z</published>
+    <updated>2025-10-21T14:30:00Z</updated>
+    <content type="html">&lt;p&gt;CI pipelines that &lt;b&gt;ship and test in parallel&lt;/b&gt; cut lead time. Here is how we did it &amp; what broke.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>Migrating a legacy parser without downtime</title>
+    <link href="https://example.org/blog/parser-migration" rel="alternate" type="text/html"/>
+    <id>urn:uuid:1a2b3c4d-0002-4f5e-9a8b-7c6d5e4f3a2b</id>
+    <published>2025-10-21T13:58:12+02:00</published>
+    <updated>2025-10-21T13:58:12+02:00</updated>
+    <author>
+      <name>Peter Novak</name>
+      <uri>https://example.org/peter</uri>
+    </author>
+    <content type="html">&lt;p&gt;A &lt;code&gt;dual-read&lt;/code&gt; strategy: run old &amp; new parsers side by side, diff outputs, then cut over.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>Post-mortem: the feed that ate a weekend</title>
+    <link href="https://example.org/blog/feed-postmortem" rel="alternate" type="text/html"/>
+    <id>urn:uuid:1a2b3c4d-0003-4f5e-9a8b-7c6d5e4f3a2b</id>
+    <published>2025-10-20T09:15:44Z</published>
+    <updated>2025-10-21T17:45:33+02:00</updated>
+    <content type="html">&lt;p&gt;One &amp;lt;item&amp;gt; with an unclosed tag took down the whole feed. Per-item error isolation is the fix.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>Notes on at-least-once delivery</title>
+    <link href="https://example.org/blog/at-least-once" rel="alternate" type="text/html"/>
+    <id>urn:uuid:1a2b3c4d-0004-4f5e-9a8b-7c6d5e4f3a2b</id>
+    <published>2025-10-19T23:58:07+02:00</published>
+    <updated>2025-10-19T23:58:07+02:00</updated>
+    <author>
+      <name>Maria Weber</name>
+      <uri>https://example.org/maria</uri>
+    </author>
+    <content type="html">&lt;p&gt;A crash between send &amp; confirm may produce one duplicate post — never a lost one.&lt;/p&gt;</content>
+  </entry>
+</feed>

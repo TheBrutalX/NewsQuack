@@ -2,12 +2,26 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+
+    <!-- T-040 coverage gate: NewsQuack.Core is the delivery-critical core -> strictest tier (>= 90 line).
+         Only NewsQuack.Core.dll is measured here: this project references only that assembly and the test
+         assembly itself is excluded by default. ThresholdStat=minimum applies the threshold per assembly. -->
+    <CollectCoverage>true</CollectCoverage>
+    <CoverletOutputFormat>cobertura</CoverletOutputFormat>
+    <ThresholdType>line</ThresholdType>
+    <ThresholdStat>minimum</ThresholdStat>
+    <Threshold>90</Threshold>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="WireMock.Net" />
+    <!-- coverlet.collector: VSTest data collector (per spec). coverlet.msbuild: MSBuild task that emits the
+         cobertura report after every test run and fails the build when Threshold is violated. -->
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
+    <PackageReference Include="coverlet.msbuild" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

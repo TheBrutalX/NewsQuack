@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Reddit Atom fixture: the Atom variant Reddit serves for subreddit RSS (e.g. /r/rust/feed) —
+     reddit-specific ids (t5_/t3_), <category> tags, authors as /u/name, links to post/comment pages,
+     millisecond-precision Zulu dates as Reddit emits them. -->
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Posts from /r/rust</title>
+  <link href="https://www.reddit.com/r/rust/new/.rss" rel="self" type="application/atom+xml"/>
+  <id>t5_2qh1i</id>
+  <updated>2025-10-21T16:40:00.123Z</updated>
+  <author>
+    <name>/u/NewsQuackBot</name>
+  </author>
+  <entry>
+    <id>t3_1mxyz9a</id>
+    <title>Show /r/rust: I built a CLI in 500 lines of Rust in /r/rust</title>
+    <category scheme="http://www.reddit.com/" term="t5_2qh1i"/>
+    <link rel="alternate" type="text/html" href="https://www.reddit.com/r/rust/comments/1mxyz9a/show_r_rust_i_built_a_cli_in_500_lines_of_rust/"/>
+    <link rel="replies" type="text/html" href="https://www.reddit.com/r/rust/comments/1mxyz9a/show_r_rust_i_built_a_cli_in_500_lines_of_rust/#comments"/>
+    <published>2025-10-21T16:39:58.456Z</published>
+    <updated>2025-10-21T16:39:58.456Z</updated>
+    <author>
+      <name>/u/crate_roller</name>
+    </author>
+    <content type="html">&lt;p&gt;Zero dependencies, one binary, &amp;amp; a test suite that runs in 200ms. Feedback welcome.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <id>t3_1mwq8zb</id>
+    <title>Traits vs. enums for error handling in /r/rust</title>
+    <category scheme="http://www.reddit.com/" term="t5_2qh1i"/>
+    <link rel="alternate" type="text/html" href="https://www.reddit.com/r/rust/comments/1mwq8zb/traits_vs_enums_for_error_handling/"/>
+    <link rel="replies" type="text/html" href="https://www.reddit.com/r/rust/comments/1mwq8zb/traits_vs_enums_for_error_handling/#comments"/>
+    <published>2025-10-21T14:12:47.901Z</published>
+    <updated>2025-10-21T15:03:22.318Z</updated>
+    <author>
+      <name>/u/borrow_checker_fan</name>
+    </author>
+    <content type="html">&lt;p&gt;When does a &lt;code&gt;thiserror&lt;/code&gt; enum beat a trait object? Benchmarks inside.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <id>t3_1mvn7ya</id>
+    <title>Rust for C++ developers: the first week in /r/rust</title>
+    <category scheme="http://www.reddit.com/" term="t5_2qh1i"/>
+    <link rel="alternate" type="text/html" href="https://www.reddit.com/r/rust/comments/1mvn7ya/rust_for_c_developers_the_first_week/"/>
+    <link rel="replies" type="text/html" href="https://www.reddit.com/r/rust/comments/1mvn7ya/rust_for_c_developers_the_first_week/#comments"/>
+    <published>2025-10-20T21:45:19.664Z</published>
+    <updated>2025-10-20T23:10:05.287Z</updated>
+    <author>
+      <name>/u/migrating_from_cpp</name>
+    </author>
+    <content type="html">&lt;p&gt;The borrow checker is not your enemy — it is a very strict code reviewer.&lt;/p&gt;</content>
+  </entry>
+</feed>
