@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Generic host (Host.CreateApplicationBuilder) is not in the base shared framework. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../NewsQuack.Core/NewsQuack.Core.csproj" />
+    <ProjectReference Include="../NewsQuack.Infrastructure/NewsQuack.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

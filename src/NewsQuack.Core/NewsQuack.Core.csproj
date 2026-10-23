@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure POCOs + frozen contracts: no package or project references (no EF Core). -->
+
+</Project>
