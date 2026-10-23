@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using NewsQuack.App.Parsing.Builders;
 using NewsQuack.Core;
 
 namespace NewsQuack.App.Parsing;
@@ -18,6 +19,7 @@ internal sealed record RawFeedItem(
     DateTimeOffset? LibraryDate,   // primary parser's already-UTC date (pass 1 only); null otherwise
     string? Description,           // raw HTML description/content text (one XML-decode level), null when absent
     string? RawImageSrc,           // src of the first real <img> element inside the description (unresolved), null when none
+    string? MediaThumbnailUrl,     // T-013: @url of &lt;media:group&gt;/&lt;media:thumbnail&gt; (namespace-aware), null when absent
     PostAuthor? Author);           // resolved author (item-level with feed-level fallback), null when none
 
 /// <summary>
@@ -31,21 +33,28 @@ internal sealed class ItemDropException(string reason) : Exception(reason)
 }
 
 /// <summary>
-/// T-012: pure mapper from a <see cref="RawFeedItem"/> to a canonical <see cref="Post"/> (item data in ⇒
-/// Post? out). Shared by both passes so their field extraction is identical. Throws <see cref="ItemDropException"/>
-/// for the droppable cases; every other fault propagates as an ordinary exception.
+/// T-012: pure mapper from a <see cref="RawFeedItem"/> to a canonical <see cref="Post"/> (item data in ⇒ Post? out). Shared by both passes so their field extraction is identical. Throws <see cref="ItemDropException"/> for the droppable cases; every other fault propagates as an ordinary exception.
+/// T-013: this mapper IS the generic platform strategy — it implements <see cref="IPostBuilder"/>, and its mapping gained coherent HTML decoding of the description through the shared <see cref="HtmlPlainText"/> helper (with an optional plain-character limit, null in v1.0). Everything else is byte-identical to T-012: title required, date rules via FeedDateParser, link resolution, ItemId derivation guid→link→SHA-256 — and no NRE on any null optional field (the NewsQuack PR #97 class).
 /// </summary>
-internal sealed class FeedItemMapper
+internal sealed class FeedItemMapper : IPostBuilder
 {
     // First &lt;img src="..."/&gt; in the raw description HTML (double or single quoted). Presentation decoding is out of scope.
     private static readonly Regex ImgSrc = new("<img\\b[^>]*?\\bsrc\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private readonly FeedDateParser _dates;
+    private readonly int? _descriptionLimit;
 
-    public FeedItemMapper(FeedDateParser dates) => _dates = dates;
+    /// <param name="dates">Shared date parser (UTC-only rules).</param>
+    /// <param name="descriptionLimit">T-013: optional plain-character cap applied AFTER decoding (no ellipsis at parse level).
+    /// v1.0 registers null — no config key exists for it in the frozen T-002 schema.</param>
+    public FeedItemMapper(FeedDateParser dates, int? descriptionLimit = null)
+    {
+        _dates = dates;
+        _descriptionLimit = descriptionLimit;
+    }
 
     /// <summary>Maps one raw item to a canonical post, or throws <see cref="ItemDropException"/> to drop it.</summary>
-    public Post? Map(RawFeedItem item, string sourceUrl)
+    public Post? Build(RawFeedItem item, string sourceUrl)
     {
         // Title is required: null/empty after trim ⇒ per-item error (never a silent empty title).
         var title = item.Title?.Trim();
@@ -61,18 +70,22 @@ internal sealed class FeedItemMapper
         var link = ResolveLink(item.Link, sourceUrl);   // nullable; relative resolved against the feed URL
         var itemId = DeriveItemId(item.GuidOrId, link, sourceUrl, title, item.RawDate);
 
+        // Image extraction runs on the RAW description (before decoding) — byte-identical to T-012: prefer the real element's
+        // src (attribute-based); fall back to a regex on the raw text for escaped &lt;img&gt;. Relative URLs resolve against
+        // the feed URL (null on failure).
+        var imageUrl = ResolveLink(item.RawImageSrc, sourceUrl) ?? ExtractImageUrl(item.Description, sourceUrl);
+
         return new Post
         {
             Id = Guid.NewGuid().ToString("D"),          // system-assigned unique id at construction time
             ItemId = itemId,                            // stable dedup key (v1.0 baseline derivation rule)
             Title = title,                              // non-null: threw above when null/empty after trim
-            Description = string.IsNullOrWhiteSpace(item.Description) ? null : item.Description,   // keep raw HTML; null when absent/empty
-            Link = link,
-            Author = item.Author,
+            // T-013: decoded plain text through the one shared helper — null when absent/empty after decoding.
+            Description = HtmlPlainText.Decode(item.Description, _descriptionLimit),
+            Link = link,                                // nullable: items without a link build fine (no NRE)
+            Author = item.Author,                       // nullable: no author ⇒ null
             PublishedAt = publishedAt.Value.ToUniversalTime(),   // always zero-offset UTC
-            // First <img> in the description: prefer the real element's src (attribute-based); fall back to a regex on the decoded
-            // text for escaped &lt;img&gt;. Relative URLs resolve against the feed URL (null on failure).
-            ImageUrl = ResolveLink(item.RawImageSrc, sourceUrl) ?? ExtractImageUrl(item.Description, sourceUrl),
+            ImageUrl = imageUrl,                        // nullable: no image found ⇒ null
             SourceUrl = sourceUrl,
         };
     }

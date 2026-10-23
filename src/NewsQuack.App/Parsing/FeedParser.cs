@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using CodeHollow.FeedReader;
+using NewsQuack.App.Parsing.Builders;
 using NewsQuack.Core;
 using Microsoft.Extensions.Logging;
 
@@ -13,19 +14,26 @@ namespace NewsQuack.App.Parsing;
 ///   • Pass 2 (tolerant fallback): runs only when pass 1 throws — walks the raw XML node-by-node so one broken item is
 ///     dropped without taking down the feed.
 /// A whole-feed failure always surfaces as an observable <c>FeedError</c> — never a silent empty list.
+/// T-013: per-item mapping is delegated to a per-platform <see cref="IPostBuilder"/> strategy, selected ONCE per
+/// <see cref="ParseAsync"/> call by the single <see cref="PostBuilderSelector"/> (the source URL is constant per feed).
 /// </summary>
 public sealed class FeedParser : IFeedParser
 {
     private readonly ILogger<FeedParser> _logger;
-    private readonly FeedItemMapper _mapper;
+    private readonly PostBuilderSelector _selector;
 
-    // Internal constructor: the class is public (it implements the frozen IFeedParser contract) but its collaborators are
+    // Internal constructors: the class is public (it implements the frozen IFeedParser contract) but its collaborators are
     // internal, so DI constructs it via a factory in the same assembly rather than through an exposed public constructor.
-    internal FeedParser(ILogger<FeedParser> logger, FeedItemMapper mapper)
+    internal FeedParser(ILogger<FeedParser> logger, PostBuilderSelector selector)
     {
         _logger = logger;
-        _mapper = mapper;
+        _selector = selector;
     }
+
+    // T-012 test-facing constructor: the given mapper becomes the generic strategy of a default selector (the platform
+    // strategies are constructed around it). Keeps T-012's tests compiling and behaving byte-identically.
+    internal FeedParser(ILogger<FeedParser> logger, FeedItemMapper mapper)
+        : this(logger, new PostBuilderSelector(mapper)) { }
 
     /// <inheritdoc />
     /// <remarks>
@@ -104,6 +112,10 @@ public sealed class FeedParser : IFeedParser
             return new FeedParseResult([], 0, "no items found");
         }
 
+        // T-013: the platform strategy is selected ONCE per ParseAsync call — the source URL is constant for this feed, so
+        // every item of it maps through the same builder. Selection never throws (unparseable ⇒ generic).
+        var builder = _selector.Select(sourceUrl);
+
         var posts = new List<Post>(nodes.Count);
         var itemErrors = 0;
 
@@ -115,7 +127,7 @@ public sealed class FeedParser : IFeedParser
 
             try
             {
-                if (_mapper.Map(raw, sourceUrl) is { } post)   // null only if the mapper ever returns it; drops throw instead
+                if (builder.Build(raw, sourceUrl) is { } post)   // null only if a builder ever returns it; drops throw instead
                     posts.Add(post);
             }
             catch (ItemDropException drop)   // known droppable case: missing title/date — no exception object to attach
@@ -156,9 +168,15 @@ public sealed class FeedParser : IFeedParser
         var description = descriptionElement?.Value;
         var rawImageSrc = FirstImgSrc(descriptionElement);   // first real <img> inside the description (unresolved)
 
+        // T-013: <media:group>/<media:thumbnail @url>, namespace-aware by local name (YouTube's media namespace); null when absent.
+        var mediaThumbnailUrl = Child(node, "group")?   // local name of <media:group> — the prefix is ignored by design
+            .Elements()
+            .FirstOrDefault(e => e.Name.LocalName == "thumbnail")?
+            .Attribute("url")?.Value;
+
         var author = ExtractAuthor(node, container, isAtom);
 
-        return new RawFeedItem(title, link, guidOrId, rawDate, libraryDate, description, rawImageSrc, author);
+        return new RawFeedItem(title, link, guidOrId, rawDate, libraryDate, description, rawImageSrc, mediaThumbnailUrl, author);
     }
 
     /// <summary>
