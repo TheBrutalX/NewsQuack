@@ -41,6 +41,9 @@ if (health.Enabled)
     // reverse proxy/Portainer. No HTTPS, no auth (non-goals).
     var webBuilder = WebApplication.CreateBuilder(args);
 
+    // T-020: IHttpClientFactory for the Discord target's named "discord" client (a later task configures that client's timeout/redirect).
+    webBuilder.Services.AddHttpClient();
+
     ApplyJsonLogging(webBuilder.Services, webBuilder.Logging, config);   // T-030: re-apply T-004's JSON-on-stdout setup — WebApplication's default providers would clobber it
     webBuilder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(health.Port));
 
@@ -82,6 +85,9 @@ else
 
     // T-004: from here on, all logging is structured JSON — one line per entry on stdout (frozen format, see tasks/t-004).
     var builder = Host.CreateApplicationBuilder(args);
+
+    // T-020: same as the health path above — both hosts must resolve IHttpClientFactory for the Discord target's named "discord" client.
+    builder.Services.AddHttpClient();
 
     ApplyJsonLogging(builder.Services, builder.Logging, config);
 

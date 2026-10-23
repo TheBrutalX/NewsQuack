@@ -1,0 +1,203 @@
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using NewsQuack.App.Configuration;
+using NewsQuack.Core;
+
+namespace NewsQuack.App.Discord;
+
+/// <summary>
+/// Pure payload construction for the three Discord webhook modes (T-020) — no HTTP, no I/O, trivially testable.
+/// Every Discord-specific limit is applied here so an over-limit field can never reach the wire: truncation always
+/// ends in a single trailing ellipsis and yields exactly <c>limit</c> characters.
+/// </summary>
+public static class DiscordPayloadBuilder
+{
+    public const int EmbedTitleLimit = 256;
+    public const int EmbedDescriptionLimit = 4096;
+    public const int ThreadNameLimit = 100;
+
+    // Author fields are truncated too — "never emit an over-limit field" applies to every field in every mode.
+    public const int AuthorNameLimit = 512;
+    public const int AuthorUrlLimit = 1024;
+
+    private static readonly Regex TagPattern = new("<[^>]*>", RegexOptions.Compiled);
+    private static readonly Regex EntityPattern = new("&#x?[0-9a-fA-F]+;|&[a-zA-Z][a-zA-Z0-9]*;", RegexOptions.Compiled);
+    private static readonly Regex WhitespacePattern = new("\\s+", RegexOptions.Compiled);
+
+    /// <summary>Maps a config "Mode" value to its enum, case-insensitively. Unknown values fall back to embed — the schema
+    /// ([EnumLike]) already rejects anything outside embed|forum|markdown at validation time, so this is belt-and-braces.</summary>
+    public static DiscordMode ParseMode(string? mode) => (mode ?? "embed").Trim().ToLowerInvariant() switch
+    {
+        "forum" => DiscordMode.Forum,
+        "markdown" => DiscordMode.Markdown,
+        _ => DiscordMode.Embed,
+    };
+
+    /// <summary>Builds the JSON body for one webhook POST in the given mode. The mode is explicit (not read from config) so the
+    /// one-shot channel-type swap can resend the same post in a different mode without a second config object.</summary>
+    public static string BuildPayload(Post post, DiscordTargetConfig config, DiscordMode mode) => mode switch
+    {
+        DiscordMode.Forum => BuildForumPayload(post, config),
+        DiscordMode.Markdown => BuildMarkdownPayload(post, config),
+        _ => BuildEmbedPayload(post, config),   // Embed — the default
+    };
+
+    private static string BuildEmbedPayload(Post post, DiscordTargetConfig config)
+    {
+        var payload = new JsonObject();
+        payload["embeds"] = new JsonArray(BuildEmbedObject(post, config));
+        return payload.ToJsonString();
+    }
+
+    private static string BuildForumPayload(Post post, DiscordTargetConfig config)
+    {
+        // Same embed as embed mode, plus "thread_name" at the top level.
+        var payload = new JsonObject();
+        payload["embeds"] = new JsonArray(BuildEmbedObject(post, config));
+        payload["thread_name"] = TruncateWithEllipsis(ThreadNameFor(post), ThreadNameLimit);
+        return payload.ToJsonString();
+    }
+
+    private static string BuildMarkdownPayload(Post post, DiscordTargetConfig config)
+    {
+        // Frozen template (T-020): **<title>**\n<link>\n\n<plain-text description>\n\n<effective image url> — each optional part is
+        // omitted entirely when absent. PlainText collapses every whitespace run to a single space, so the assembled string can
+        // never contain 3+ consecutive newlines (the template's own \n\n separators are the only line breaks). Title and description
+        // are truncated to their embed limits before assembly so no part ever exceeds its limit in any mode.
+        var markdown = new StringBuilder();
+
+        markdown.Append("**").Append(TruncateWithEllipsis(post.Title, EmbedTitleLimit)).Append("**");
+
+        if (!string.IsNullOrEmpty(post.Link))
+            markdown.Append('\n').Append(post.Link);
+
+        var description = PlainText(post.Description);
+        if (description is not null)
+            markdown.Append("\n\n").Append(TruncateWithEllipsis(description, EmbedDescriptionLimit));
+
+        var image = EffectiveImage(post, config);
+        if (image is not null)
+            markdown.Append("\n\n").Append(image);
+
+        var payload = new JsonObject();
+        payload["content"] = markdown.ToString();
+        return payload.ToJsonString();
+    }
+
+    /// <summary>The single embed object shared by embed and forum modes — built once so both stay field-for-field identical.</summary>
+    private static JsonObject BuildEmbedObject(Post post, DiscordTargetConfig config)
+    {
+        var embed = new JsonObject();
+
+        embed["title"] = TruncateWithEllipsis(post.Title, EmbedTitleLimit);
+
+        var description = PlainText(post.Description);   // null when absent or empty after stripping → field omitted
+        if (description is not null)
+            embed["description"] = TruncateWithEllipsis(description, EmbedDescriptionLimit);
+
+        if (!string.IsNullOrEmpty(post.Link))
+            embed["url"] = post.Link;                    // omitted when null
+
+        if (config.Color is { } color)
+            embed["color"] = color;                      // omitted when null
+
+        if (post.Author is { } author)                   // omitted when post.Author is null
+        {
+            var authorObject = new JsonObject();
+            authorObject["name"] = TruncateWithEllipsis(author.Name, AuthorNameLimit);
+            if (!string.IsNullOrEmpty(author.Url))
+                authorObject["url"] = TruncateWithEllipsis(author.Url, AuthorUrlLimit);
+
+            embed["author"] = authorObject;
+        }
+
+        // ISO 8601 UTC with Z suffix — invariant culture, no CurrentCulture anywhere (T-020 date rule).
+        embed["timestamp"] = post.PublishedAt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+
+        var image = EffectiveImage(post, config);
+        if (image is not null)                           // omitted when no effective image at all
+            embed["image"] = new JsonObject { ["url"] = image };
+
+        return embed;
+    }
+
+    /// <summary>Forum thread name: the post title, or — when the title is null/empty — the host of <c>post.SourceUrl</c> (the v1.0
+    /// "feed name" fallback, e.g. "example.com"; documented in the T-020 report). A malformed SourceUrl must not crash delivery:
+    /// the raw value is used as-is in that case (still truncated to the limit by the caller).</summary>
+    private static string ThreadNameFor(Post post)
+    {
+        if (!string.IsNullOrWhiteSpace(post.Title))
+            return post.Title;
+
+        return Uri.TryCreate(post.SourceUrl, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.Host)
+            ? uri.Host
+            : post.SourceUrl;
+    }
+
+    /// <summary>The fallback image rule: the post's own image when non-empty, else the configured fallback (guarantees an image
+    /// whenever resolution earlier in the pipeline left ImageUrl empty), else none.</summary>
+    private static string? EffectiveImage(Post post, DiscordTargetConfig config)
+        => !string.IsNullOrWhiteSpace(post.ImageUrl) ? post.ImageUrl : config.FallbackImageUrl;
+
+    /// <summary>Shared HTML → plain-text helper used by every mode so stripping behavior is coherent across them: removes tags
+    /// (replaced with a space so adjacent words do not merge), decodes common entities and numeric character references, then
+    /// collapses all whitespace runs to a single space. Returns null when the result is empty.</summary>
+    public static string? PlainText(string? html)
+    {
+        if (string.IsNullOrEmpty(html))
+            return null;
+
+        var noTags = TagPattern.Replace(html, " ");
+        var decoded = EntityPattern.Replace(noTags, DecodeEntity);
+        var collapsed = WhitespacePattern.Replace(decoded, " ").Trim();
+
+        return collapsed.Length == 0 ? null : collapsed;
+    }
+
+    private static string DecodeEntity(Match match)
+    {
+        var entity = match.Value;   // e.g. &amp;, &#39;, &#x27;
+
+        if (entity[1] == '#')       // numeric character reference: &#39; / &#x27;
+        {
+            var digits = entity[2..^1];
+            var isHex = digits.Length > 1 && (digits[0] is 'x' or 'X');
+            var valuePart = isHex ? digits[1..] : digits;
+
+            if ((isHex
+                    ? int.TryParse(valuePart, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var codePoint)
+                    : int.TryParse(valuePart, NumberStyles.Integer, CultureInfo.InvariantCulture, out codePoint))
+                && codePoint > 0 && codePoint <= 0x10FFFF
+                && (codePoint < 0xD800 || codePoint > 0xDFFF))   // surrogates alone are invalid — keep the raw entity
+            {
+                return char.ConvertFromUtf32(codePoint);
+            }
+
+            return entity;        // malformed numeric ref — keep as-is, never crash stripping
+        }
+
+        return entity.ToLowerInvariant() switch    // common named entities; unknown ones (e.g. &somecustom;) pass through unchanged
+        {
+            "&amp;" => "&",
+            "&lt;" => "<",
+            "&gt;" => ">",
+            "&quot;" => "\"",
+            "&apos;" => "'",
+            "&nbsp;" => " ",   // collapses to a single space like every other whitespace run downstream
+            _ => entity,
+        };
+    }
+
+    /// <summary>Truncates to exactly <paramref name="limit"/> characters with a single trailing ellipsis when cutting; returns the
+    /// value unchanged when it already fits. The result is never longer than the limit.</summary>
+    public static string TruncateWithEllipsis(string value, int limit)
+    {
+        if (value.Length <= limit)
+            return value;
+
+        return value[..(limit - 1)] + "…";   // single trailing ellipsis, total length exactly `limit`
+    }
+}
