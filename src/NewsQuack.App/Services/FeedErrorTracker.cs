@@ -29,6 +29,9 @@ public interface IFeedErrorTracker
     /// <summary>The v1.0 "metric" for auto-removals (T-016 decision 5 — no metrics endpoint exists yet): incremented on every failure at or above the
     /// threshold while auto-remove is enabled.</summary>
     int AutoRemovedCount { get; }
+
+    /// <summary>T-024 (additive, decision 7): remaining backoff for this feed at <paramref name="nowUtc"/> — zero when never failed or the last attempt succeeded.</summary>
+    Task<TimeSpan> BackoffRemainingAsync(string feedUrl, DateTimeOffset nowUtc, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -112,6 +115,22 @@ public sealed class FeedErrorTracker : IFeedErrorTracker
         }
 
         return new FeedErrorDecision(errorCount, nextAttemptDelay, autoRemoved);
+    }
+
+    /// <summary>T-024 (additive, decision 7): the remaining backoff for this feed at <paramref name="nowUtc"/> — reuses the existing persisted state and
+    /// formula: <c>LastErrorAtUtc + min(30 s × 2^(count−1), 6 h) − nowUtc</c>, clamped ≥ 0. Zero when there is no row (never failed) or the last attempt
+    /// succeeded (RecordAttemptAsync resets ErrorCount to 0 and clears LastErrorAtUtc). Read-only: it never mutates state.</summary>
+    public async Task<TimeSpan> BackoffRemainingAsync(string feedUrl, DateTimeOffset nowUtc, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(feedUrl);
+
+        var state = await _store.GetFeedStateAsync(feedUrl, ct);
+
+        if (state is null || state.ErrorCount == 0 || state.LastErrorAtUtc is not { } lastErrorAtUtc)
+            return TimeSpan.Zero;   // never failed, or the last attempt succeeded ⇒ no backoff in effect
+
+        var backoffUntil = lastErrorAtUtc + ComputeBackoff(state.ErrorCount);   // same formula as RecordAttemptAsync (decision 3)
+        return backoffUntil > nowUtc ? backoffUntil - nowUtc : TimeSpan.Zero;   // clamped ≥ 0 — the window has already elapsed ⇒ zero
     }
 
     /// <summary>Binding backoff formula (T-016 decision 3): min(30 s × 2^(count−1), 6 h). Pinned boundaries: count 1 → 30 s, …, 10 → 4 h 16 m

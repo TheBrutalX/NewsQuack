@@ -3,8 +3,9 @@ using NewsQuack.App.Fetching;             // T-010: feed fetcher + global thrott
 using NewsQuack.App.Health;
 using NewsQuack.App.Http;                 // T-005: named HTTP clients + anti-SSRF redirect handler
 using NewsQuack.App.Logging;
-using NewsQuack.App.Pipeline;                // T-014: dedup engine + DedupCheckStage (Order 10)
+using NewsQuack.App.Pipeline;                // T-014: dedup engine + DedupCheckStage (Order 10); T-024: runner + v1.0 stages + send queues
 using NewsQuack.App.Parsing;                 // T-012: feed parser (two-pass) + date parser + item mapper
+using NewsQuack.App.Scheduling;              // T-024: per-instance scheduler (one BackgroundService per configured instance)
 using NewsQuack.App.Services;                // T-015: retention job
 using NewsQuack.Core;                        // T-015: IStateStore contract
 using NewsQuack.Infrastructure.Persistence;  // T-015: AppDbContext / SqliteStateStore / connection interceptor
@@ -62,6 +63,12 @@ if (health.Enabled)
 
     webBuilder.Services.AddDedupEngine();         // T-014: dedup engine + DedupCheckStage (Order 10) — same wiring as the generic host path
 
+    webBuilder.Services.AddSingleton<NewsquackConfig>(config);   // T-024: the validated, immutable config — safe singleton (same wiring as the generic host path)
+
+    webBuilder.Services.AddPostPipeline();         // T-024: runner + ImageResolutionStage + SendStage + send-queue registry (same wiring as the generic host path)
+
+    webBuilder.Services.AddInstanceScheduling(config);   // T-024: one per-instance scheduler — same wiring as the generic host path
+
     // T-015: "store" is a readiness requirement registered at wiring time — /readyz answers 503 (missing ["store"]) until the
     // startup migration succeeds. T-030 itself registers no requirements; this factory is where its own wiring declares them.
     webBuilder.Services.AddSingleton<ReadinessTracker>(sp =>
@@ -117,6 +124,12 @@ else
     builder.Services.AddFeedErrorTracking();   // T-016: per-feed error tracker — runs regardless of the health listener
 
     builder.Services.AddDedupEngine();         // T-014: dedup engine + DedupCheckStage (Order 10) — runs regardless of the health listener
+
+    builder.Services.AddSingleton<NewsquackConfig>(config);   // T-024: the validated, immutable config — safe singleton (same wiring as the health path)
+
+    builder.Services.AddPostPipeline();         // T-024: runner + ImageResolutionStage + SendStage + send-queue registry (same wiring as the health path)
+
+    builder.Services.AddInstanceScheduling(config);   // T-024: one per-instance scheduler — runs regardless of the health listener
 
     var host = builder.Build();
 

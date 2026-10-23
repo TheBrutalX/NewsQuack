@@ -332,4 +332,39 @@ public class FeedErrorTrackerTests
         var tenth = await tracker.RecordAttemptAsync(FeedUrl, Failure(), NowUtc);
         Assert.True(tenth.AutoRemoved);   // issue default enableAutoRemove=true — removed exactly at the 10th failure
     }
+
+    // ── BackoffRemainingAsync (T-024 additive, decision 7) ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BackoffRemaining_NeverFailed_ReturnsZero()
+    {
+        var (tracker, _, _) = CreateTracker();   // no attempts recorded — no row at all
+
+        Assert.Equal(TimeSpan.Zero, await tracker.BackoffRemainingAsync(FeedUrl, NowUtc));   // zero when never failed
+    }
+
+    [Fact]
+    public async Task BackoffRemaining_AfterFirstFailure_ReturnsFullWindowThatShrinksToZero()
+    {
+        var (tracker, _, _) = CreateTracker();
+
+        await tracker.RecordAttemptAsync(FeedUrl, Failure(), NowUtc);   // count 1 ⇒ a 30 s backoff starting at the injected instant
+
+        Assert.Equal(TimeSpan.FromSeconds(30), await tracker.BackoffRemainingAsync(FeedUrl, NowUtc));            // exactly at the failure instant: the full window remains
+        Assert.Equal(TimeSpan.FromSeconds(20), await tracker.BackoffRemainingAsync(FeedUrl, NowUtc.AddSeconds(10)));   // 10 s later ⇒ 20 s remain (shrinks with time)...
+        Assert.Equal(TimeSpan.Zero, await tracker.BackoffRemainingAsync(FeedUrl, NowUtc.AddSeconds(31)));         // ...and clamps to zero once it has elapsed (never negative)
+    }
+
+    [Fact]
+    public async Task BackoffRemaining_SuccessAfterFailure_ResetsToZero()
+    {
+        var (tracker, _, _) = CreateTracker();
+
+        await tracker.RecordAttemptAsync(FeedUrl, Failure(), NowUtc);   // count 1 ⇒ in backoff
+        Assert.Equal(TimeSpan.FromSeconds(30), await tracker.BackoffRemainingAsync(FeedUrl, NowUtc));
+
+        await tracker.RecordAttemptAsync(FeedUrl, Success(), NowUtc);   // a success resets the counter and clears LastErrorAtUtc
+
+        Assert.Equal(TimeSpan.Zero, await tracker.BackoffRemainingAsync(FeedUrl, NowUtc));   // last attempt succeeded ⇒ no backoff in effect
+    }
 }
