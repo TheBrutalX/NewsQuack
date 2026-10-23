@@ -3,5 +3,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- T-045: NuGet vulnerability audit is integrated into restore (SDK 10 has no `dotnet audit` command).
+         NU1901 (low) / NU1902 (moderate) stay plain warnings; NU1903 (high) / NU1904 (critical) are
+         errors in every restore/build, locally and in CI. -->
+    <NuGetAudit>true</NuGetAudit>
+    <WarningsAsErrors>NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 </Project>
