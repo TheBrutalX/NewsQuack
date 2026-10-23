@@ -1,3 +1,4 @@
+using System.Globalization;
 using Xunit;
 
 namespace NewsQuack.App.Tests;
@@ -24,10 +25,13 @@ public class EnvOverrideBootTests
             var json = $$"""{ "Instances": [ {{ConfigTestHelper.Instance("main", 15, discord: discord)}} ] }""";
             AppBootHelper.WriteFile(dir, "newsquack.json", json);
 
+            // T-030: the health listener is enabled by default — pin a unique port so parallel boot tests do not collide on 8081.
+            var port = AppBootHelper.GetFreePort();
             using var boot = AppBootHelper.StartApp(dotnet, appAssembly, [], psi =>
             {
                 psi.WorkingDirectory = dir;
                 psi.Environment["NEWSQUACK_INSTANCES__0__DISCORD__WEBHOOKURL"] = ConfigTestHelper.WebhookUrl;
+                psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture);
             });
 
             Assert.False(boot.Process.WaitForExit(10_000), "host exited right after startup — expected it to keep running (the env override should have won over the file value)");

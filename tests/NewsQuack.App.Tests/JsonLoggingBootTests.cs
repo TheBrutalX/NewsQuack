@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Xunit;
 
@@ -21,7 +22,9 @@ public class JsonLoggingBootTests
             var json = $$"""{ "Instances": [ {{ConfigTestHelper.Instance("main", 15)}} ] }""";
             var configFile = AppBootHelper.WriteFile(dir, "newsquack.json", json);
 
-            using var boot = AppBootHelper.StartApp(dotnet, appAssembly, [configFile]);
+            // T-030: the health listener is enabled by default — pin a unique port so parallel boot tests do not collide on 8081.
+            var port = AppBootHelper.GetFreePort();
+            using var boot = AppBootHelper.StartApp(dotnet, appAssembly, [configFile], psi => psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture));
 
             Assert.False(boot.Process.WaitForExit((int)StartTimeout.TotalMilliseconds), "host exited right after startup — expected it to keep running");
             boot.Process.Kill(entireProcessTree: true);
@@ -70,7 +73,9 @@ public class JsonLoggingBootTests
             var json = $$"""{ "Instances": [ {{ConfigTestHelper.Instance("main", 15)}} ], "Logging": { "Level": "Error" } }""";
             var configFile = AppBootHelper.WriteFile(dir, "newsquack.json", json);
 
-            using var boot = AppBootHelper.StartApp(dotnet, appAssembly, [configFile]);
+            // T-030: the health listener is enabled by default — pin a unique port so parallel boot tests do not collide on 8081.
+            var port = AppBootHelper.GetFreePort();
+            using var boot = AppBootHelper.StartApp(dotnet, appAssembly, [configFile], psi => psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture));
 
             Assert.False(boot.Process.WaitForExit((int)StartTimeout.TotalMilliseconds), "host exited right after startup — expected it to keep running");
             boot.Process.Kill(entireProcessTree: true);

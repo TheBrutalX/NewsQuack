@@ -5,8 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Generic host (Host.CreateApplicationBuilder) is not in the base shared framework. -->
-    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <!-- T-030: Kestrel + minimal APIs for the health endpoints (Health.Enabled=true path). The ASP.NET Core shared framework also
+         provides the generic host, so no Microsoft.Extensions.Hosting package reference is needed anymore. Consequence: the runtime
+         Docker image must be dotnet/aspnet (the ASP.NET Core shared framework) — see the repo-root Dockerfile. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>

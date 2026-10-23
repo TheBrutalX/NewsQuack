@@ -4,9 +4,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Generic host for the executable (not part of the base shared framework). -->
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.13" />
-
     <!-- EF Core packages live in NewsQuack.Infrastructure only; versions are centralized here. -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13" />

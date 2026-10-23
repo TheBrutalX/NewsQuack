@@ -114,7 +114,19 @@ public static class JsonLogFormatter
             return;
         }
 
-        writer.WritePropertyName(key);   // Serialize below writes only the value — the property name must be written first
-        JsonSerializer.Serialize(writer, value, value.GetType());   // numbers/bools native, objects/arrays/enums via their default System.Text.Json representation
+        JsonElement element;   // SerializeToElement is all-or-nothing: on failure nothing has been written to the line yet
+        try
+        {
+            element = JsonSerializer.SerializeToElement(value, value.GetType());   // numbers/bools native, objects/arrays/enums via their default System.Text.Json representation
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            // Some framework-internal state values are not JSON-serializable by design — e.g. a RuntimeMethodInfo in ASP.NET Core routing diagnostics (T-030 enabled WebApplication). Fall back to the string representation so one bad value can never break the frozen line format or 500 the request through Logger.ThrowLoggingError.
+            writer.WriteString(key, value.ToString());
+            return;
+        }
+
+        writer.WritePropertyName(key);   // WriteTo below writes only the value — the property name must be written first
+        element.WriteTo(writer);
     }
 }

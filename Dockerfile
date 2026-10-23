@@ -17,7 +17,9 @@ RUN dotnet restore Newsquack.sln
 COPY . .
 RUN dotnet publish src/NewsQuack.App -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime
+# T-030: the App now carries a FrameworkReference to Microsoft.AspNetCore.App (health endpoints), so the runtime stage must be the
+# aspnet image — dotnet/runtime does not contain the ASP.NET Core shared framework and the container would fail at startup.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 # Dedicated non-root user (uid/gid 1001).
 RUN groupadd --gid 1001 app \

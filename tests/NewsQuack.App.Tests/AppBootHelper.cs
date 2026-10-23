@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using NewsQuack.App.Configuration;
 
 namespace NewsQuack.App.Tests;
@@ -79,6 +81,24 @@ internal static class AppBootHelper
         var file = Path.Combine(dir, fileName);
         File.WriteAllText(file, content);
         return file;
+    }
+
+    /// <summary>
+    /// Asks the OS for a free TCP port (bind to loopback port 0, take the assigned number, release it again). T-030's health listener is enabled by default on Health.Port (8081), so every boot test that keeps the app running must pin its own port via NEWSQUACK_HEALTH__PORT — otherwise parallel tests collide on the default port and lose with "address already in use".
+    /// </summary>
+    public static int GetFreePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+
+        try
+        {
+            return ((IPEndPoint)listener.LocalEndpoint).Port;   // non-null: LocalEndpoint is set after Start on a TCP listener
+        }
+        finally
+        {
+            listener.Stop();   // release immediately — the app (or the test's blocker) binds it right away
+        }
     }
 
     private static string? FindDotnet()

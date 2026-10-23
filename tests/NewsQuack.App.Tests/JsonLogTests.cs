@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Text.Json;
 using NewsQuack.App.Configuration;
 using NewsQuack.App.Logging;
@@ -144,6 +145,23 @@ public class JsonLogTests
 
         var doc = capture.ParseLine();
         Assert.False(doc.TryGetProperty("props", out _));   // omitted entirely — not {} and not null
+    }
+
+    [Fact]
+    public void JsonLog_PropValueNotJsonSerializable_FallsBackToStringRepresentation()
+    {
+        using var capture = new LogCapture();
+
+        // ASP.NET Core routing diagnostics log endpoint metadata as a RuntimeMethodInfo (T-030 enabled WebApplication) — STJ cannot
+        // serialize that by design. The provider must not throw, or Logger.ThrowLoggingError turns the logging error into a 500.
+        var method = typeof(JsonLogTests).GetMethod(nameof(Throw), BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);   // precondition — the test helper above must exist
+
+        capture.Logger().LogInformation("endpoint {Metadata}", method);
+
+        var doc = capture.ParseLine();   // still exactly one valid JSON line
+        var value = doc.GetProperty("props").GetProperty("Metadata");
+        Assert.Equal(JsonValueKind.String, value.ValueKind);   // string fallback — the type's ToString() representation
     }
 
     [Fact]
