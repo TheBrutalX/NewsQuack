@@ -3,6 +3,7 @@ using NewsQuack.App.Fetching;             // T-010: feed fetcher + global thrott
 using NewsQuack.App.Health;
 using NewsQuack.App.Http;                 // T-005: named HTTP clients + anti-SSRF redirect handler
 using NewsQuack.App.Logging;
+using NewsQuack.App.Pipeline;                // T-014: dedup engine + DedupCheckStage (Order 10)
 using NewsQuack.App.Parsing;                 // T-012: feed parser (two-pass) + date parser + item mapper
 using NewsQuack.App.Services;                // T-015: retention job
 using NewsQuack.Core;                        // T-015: IStateStore contract
@@ -59,6 +60,8 @@ if (health.Enabled)
 
     webBuilder.Services.AddFeedErrorTracking();   // T-016: per-feed error tracker (backoff + auto-remove) — same wiring as the generic host path
 
+    webBuilder.Services.AddDedupEngine();         // T-014: dedup engine + DedupCheckStage (Order 10) — same wiring as the generic host path
+
     // T-015: "store" is a readiness requirement registered at wiring time — /readyz answers 503 (missing ["store"]) until the
     // startup migration succeeds. T-030 itself registers no requirements; this factory is where its own wiring declares them.
     webBuilder.Services.AddSingleton<ReadinessTracker>(sp =>
@@ -112,6 +115,8 @@ else
     AddStateStore(builder.Services);   // T-015: the store + retention job run regardless of the health listener
 
     builder.Services.AddFeedErrorTracking();   // T-016: per-feed error tracker — runs regardless of the health listener
+
+    builder.Services.AddDedupEngine();         // T-014: dedup engine + DedupCheckStage (Order 10) — runs regardless of the health listener
 
     var host = builder.Build();
 
