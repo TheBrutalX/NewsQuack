@@ -57,6 +57,8 @@ if (health.Enabled)
 
     AddStateStore(webBuilder.Services);   // T-015: state store + retention job (same wiring as the generic host path)
 
+    webBuilder.Services.AddFeedErrorTracking();   // T-016: per-feed error tracker (backoff + auto-remove) — same wiring as the generic host path
+
     // T-015: "store" is a readiness requirement registered at wiring time — /readyz answers 503 (missing ["store"]) until the
     // startup migration succeeds. T-030 itself registers no requirements; this factory is where its own wiring declares them.
     webBuilder.Services.AddSingleton<ReadinessTracker>(sp =>
@@ -108,6 +110,8 @@ else
     builder.Services.AddScoped<LogEnricher>();
 
     AddStateStore(builder.Services);   // T-015: the store + retention job run regardless of the health listener
+
+    builder.Services.AddFeedErrorTracking();   // T-016: per-feed error tracker — runs regardless of the health listener
 
     var host = builder.Build();
 
