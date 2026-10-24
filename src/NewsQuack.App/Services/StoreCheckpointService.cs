@@ -20,6 +20,9 @@ public sealed class StoreCheckpointService : IHostedService
     /// <summary>The shutdown checkpoint — TRUNCATE mode: on success the WAL file is truncated to zero bytes, so on-disk state is complete after stop.</summary>
     private const string CheckpointPragma = "PRAGMA wal_checkpoint(TRUNCATE);";
 
+    /// <summary>Bounded deadline for the checkpoint work itself (issue #48): the stopping token handed to StopAsync is already canceled by the time we run, so a wedged SQLite connection must not hang host stop forever — 10 s is generous for a TRUNCATE on our data volumes.</summary>
+    private const int CheckpointTimeoutSeconds = 10;
+
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<StoreCheckpointService> _logger;
 
@@ -39,17 +42,23 @@ public sealed class StoreCheckpointService : IHostedService
     /// for a structured Info log. Catches everything (Error log, exception as argument) and never rethrows — host stop must survive a failed checkpoint.</summary>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        // The stopping token the host hands us is ALREADY canceled by the time StopAsync runs — using it would cancel the very work we exist to do
+        // (issue #48, found in the integration smoke test: "WAL checkpoint on shutdown failed: A task was canceled"). Bound the checkpoint with our
+        // own deadline instead; a wedged connection gives up after CheckpointTimeoutSeconds rather than hanging host stop.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(CheckpointTimeoutSeconds));
+        var ct = cts.Token;
+
         try
         {
-            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);   // factory-created context — one per operation, never shared
+            await using var context = await _contextFactory.CreateDbContextAsync(ct);   // factory-created context — one per operation, never shared
 
-            await context.Database.OpenConnectionAsync(cancellationToken);   // through EF ⇒ the init interceptor applies WAL/synchronous as on every other open
+            await context.Database.OpenConnectionAsync(ct);   // through EF ⇒ the init interceptor applies WAL/synchronous as on every other open
 
             await using var command = context.Database.GetDbConnection().CreateCommand();
             command.CommandText = CheckpointPragma;   // connection-level maintenance — the second sanctioned raw-SQL exception (no data access)
 
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            if (await reader.ReadAsync(cancellationToken))   // the pragma returns exactly one row: busy | log | checkpointed
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            if (await reader.ReadAsync(ct))   // the pragma returns exactly one row: busy | log | checkpointed
                 _logger.LogInformation("WAL checkpoint on shutdown completed: busy={Busy}, wal-frames={LogFrames}, checkpointed-frames={CheckpointedFrames}", reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2));
             else
                 _logger.LogWarning("WAL checkpoint on shutdown returned no result row — nothing to report");   // defensive: the pragma always returns a row, but never assume it

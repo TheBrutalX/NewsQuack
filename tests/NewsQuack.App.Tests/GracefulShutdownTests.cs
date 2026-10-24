@@ -393,7 +393,11 @@ public class GracefulShutdownTests
                 var capture = new LogCapture();
                 var service = new StoreCheckpointService(contextFactory, capture.For<StoreCheckpointService>());
 
-                await service.StopAsync(CancellationToken.None);   // no-op start (decision 3) — all work happens here
+                // The host hands StopAsync an ALREADY-CANCELED stopping token — the checkpoint must still run (issue #48 regression pin: using the
+                // passed token canceled the very first await and the checkpoint never executed in production).
+                using var cancelled = new CancellationTokenSource();
+                cancelled.Cancel();
+                await service.StopAsync(cancelled.Token);   // no-op start (decision 3) — all work happens here
 
                 // The WAL is truncated to 0 bytes (TRUNCATE mode)...
                 Assert.True(File.Exists(dbPath + "-wal"), "the -wal file must still exist after a TRUNCATE checkpoint (it is truncated, not deleted)");
