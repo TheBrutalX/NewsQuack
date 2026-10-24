@@ -60,6 +60,29 @@ public class DedupCheckStageTests
     }
 
     [Fact]
+    public async Task DedupCheckStage_Execute_ItemPendingButUnconfirmed_Skips()
+    {
+        var (stage, store, logs) = CreateStage();
+        // T-049: the item is IN FLIGHT — enqueued but never confirmed (delivered set empty, pending set has it). A slow drain must not re-enqueue it.
+        store.SeedPending(DedupTestPost.InstanceId, ItemId);
+
+        var ctx = DedupTestPost.Context(DedupTestPost.InstanceId, ItemId);
+        var original = ctx.CurrentPost;   // captured before the stage runs — asserted untouched after
+
+        await stage.ExecuteAsync(ctx);
+
+        Assert.True(ctx.Skip);   // skipped while pending — no second enqueue (and thus no second send) on this poll
+        Assert.Same(original, ctx.CurrentPost);          // never replaced...
+        Assert.Equal(original, ctx.CurrentPost);         // ...and never mutated (the stage only reads + sets Skip)
+        // The delivered check ran first and found nothing; the pending check then caught the in-flight item — exactly one call each.
+        Assert.Single(store.IsDeliveredCalls);
+        Assert.Single(store.IsPendingCalls);
+        Assert.Equal((DedupTestPost.InstanceId, ItemId), store.IsPendingCalls[0]);   // keyed by THIS instance's id + the post's item id
+        // Debug log with instanceId + itemId — the observable skip reason (same shape as the delivered-skip log).
+        Assert.NotNull(logs.Find(LogLevel.Debug, DedupTestPost.InstanceId, ItemId));
+    }
+
+    [Fact]
     public async Task DedupCheck_DeliveredInOtherInstance_NotSkippedForThisInstance()
     {
         var (stage, store, _) = CreateStage();

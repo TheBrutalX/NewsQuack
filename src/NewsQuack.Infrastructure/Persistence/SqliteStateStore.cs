@@ -56,6 +56,59 @@ public sealed class SqliteStateStore : IStateStore
         return await db.DeliveredItems.AsNoTracking().AnyAsync(d => d.InstanceId == instanceId && d.ItemId == itemId, ct);
     }
 
+    public async Task MarkPendingAsync(string instanceId, string itemId, CancellationToken ct = default)
+    {
+        // T-049: upsert — a re-mark (the next poll of a slow drain) is the NORMAL case, so load-or-create and refresh; it must never throw a unique violation.
+        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+
+        var row = await db.PendingItems.FirstOrDefaultAsync(p => p.InstanceId == instanceId && p.ItemId == itemId, ct);
+        if (row is null)
+        {
+            row = new PendingItem { InstanceId = instanceId, ItemId = itemId };
+            db.PendingItems.Add(row);
+        }
+
+        row.EnqueuedAtUtc = DateTimeOffset.UtcNow.UtcDateTime;   // boundary conversion: persisted as UTC DateTime (the contract passes no timestamp — the store stamps it)
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task ClearPendingAsync(string instanceId, string itemId, CancellationToken ct = default)
+    {
+        // T-049: delete by key; a no-op when absent (the confirm/dead-letter transaction may have cleared the row already).
+        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+
+        var row = await db.PendingItems.FirstOrDefaultAsync(p => p.InstanceId == instanceId && p.ItemId == itemId, ct);
+        if (row is null)
+            return;
+
+        db.PendingItems.Remove(row);   // untracked entity with key set — attached as Deleted, no raw SQL needed
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<bool> IsPendingAsync(string instanceId, string itemId, CancellationToken ct = default)
+    {
+        // T-049: the in-flight half of the dedup check — one indexed lookup, per-instance by construction (same shape as IsDeliveredAsync).
+        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+
+        return await db.PendingItems.AsNoTracking().AnyAsync(p => p.InstanceId == instanceId && p.ItemId == itemId, ct);
+    }
+
+    public async Task<int> CleanupAllPendingAsync(CancellationToken ct = default)
+    {
+        // T-049: startup cleanup — at boot every pending row belongs to the previous (dead) process; delete ALL of them before any worker starts.
+        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+
+        var rows = await db.PendingItems.AsNoTracking().ToListAsync(ct);
+        if (rows.Count == 0)
+            return 0;
+
+        db.PendingItems.RemoveRange(rows);   // untracked entities with keys set are attached as Deleted — no raw SQL needed
+        await db.SaveChangesAsync(ct);
+
+        return rows.Count;
+    }
+
     public async Task MarkDeliveredAsync(string instanceId, string feedUrl, string itemId, DateTimeOffset deliveredAtUtc, FeedState? newFeedState, CancellationToken ct = default)
     {
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
@@ -73,6 +126,11 @@ public sealed class SqliteStateStore : IStateStore
                 Title = null,   // the contract passes only id/feed/item/deliveredAt — no title is available here
                 DeliveredAtUtc = deliveredAtUtc.UtcDateTime,   // boundary conversion: contract DateTimeOffset → persisted UTC DateTime
             });
+
+            // T-049: clear the in-flight marker in THIS SAME transaction — the pending delete commits atomically with the delivered insert (one SaveChanges, no second round trip). A failed commit rolls both back.
+            var pending = await db.PendingItems.FirstOrDefaultAsync(p => p.InstanceId == instanceId && p.ItemId == itemId, ct);
+            if (pending is not null)
+                db.PendingItems.Remove(pending);
 
             if (newFeedState is not null)
                 ApplyFeedState(await LoadOrCreateFeedStateRowAsync(db, newFeedState, ct), newFeedState);
@@ -132,20 +190,28 @@ public sealed class SqliteStateStore : IStateStore
 
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
 
-        // Single-row insert — no transaction needed. The table comes from T-015's InitialCreate (no new migration, T-022 decision 1).
-        db.DeadLetterEntries.Add(new DeadLetterEntry
+        // T-049: UPSERT — load-or-create exactly like LoadOrCreateFeedStateRowAsync. Repeated dead-lettering of the same item (re-attempted on a later
+        // cycle — unchanged known limitation) refreshes the ONE row instead of duplicating it; the unique index on (instance_id, item_id) is the safety net.
+        var entry = await db.DeadLetterEntries.FirstOrDefaultAsync(e => e.InstanceId == deadLetter.InstanceId && e.ItemId == deadLetter.ItemId, ct);
+        if (entry is null)
         {
-            InstanceId = deadLetter.InstanceId,
-            FeedUrl = deadLetter.FeedUrl,
-            ItemId = deadLetter.ItemId,
-            PayloadJson = deadLetter.PayloadJson,   // full post payload as JSON — serialized by the caller (T-022)
-            Attempts = deadLetter.Attempts,
-            ErrorCategory = deadLetter.ErrorCategory,   // "429" / "5xx" / "timeout" / "400-payload" — classified by the caller (T-022)
-            LastError = deadLetter.LastError,
-            FailedAtUtc = deadLetter.FailedAtUtc.UtcDateTime,   // boundary conversion: contract DateTimeOffset → persisted UTC DateTime
-        });
+            entry = new DeadLetterEntry { InstanceId = deadLetter.InstanceId, FeedUrl = deadLetter.FeedUrl, ItemId = deadLetter.ItemId };
+            db.DeadLetterEntries.Add(entry);
+        }
 
-        await db.SaveChangesAsync(ct);
+        entry.PayloadJson = deadLetter.PayloadJson;   // full post payload as JSON — serialized by the caller (T-022)
+        entry.Attempts = deadLetter.Attempts;
+        entry.ErrorCategory = deadLetter.ErrorCategory;   // "429" / "5xx" / "timeout" / "400-payload" — classified by the caller (T-022)
+        entry.LastError = deadLetter.LastError;
+        entry.FailedAtUtc = deadLetter.FailedAtUtc.UtcDateTime;   // boundary conversion: contract DateTimeOffset → persisted UTC DateTime
+
+        // T-049: clear the in-flight marker in the SAME SaveChanges — atomic with the dead-letter upsert (a separate best-effort clear after a failed
+        // save would park the item pending until restart and change the documented re-attempt behavior).
+        var pending = await db.PendingItems.FirstOrDefaultAsync(p => p.InstanceId == deadLetter.InstanceId && p.ItemId == deadLetter.ItemId, ct);
+        if (pending is not null)
+            db.PendingItems.Remove(pending);
+
+        await db.SaveChangesAsync(ct);   // one save — upsert + marker clear commit together
     }
 
     private static async Task<FeedStateRow> LoadOrCreateFeedStateRowAsync(AppDbContext db, FeedState state, CancellationToken ct)

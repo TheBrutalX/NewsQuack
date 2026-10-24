@@ -21,5 +21,7 @@ public sealed class DeadLetterEntryConfiguration : IEntityTypeConfiguration<Dead
         builder.Property(e => e.ErrorCategory).HasColumnName("error_category");  // "429" / "5xx" / "timeout" / "400-payload"
         builder.Property(e => e.LastError).HasColumnName("last_error");
         builder.Property(e => e.FailedAtUtc).HasColumnName("failed_at_utc");
+
+        builder.HasIndex(e => new { e.InstanceId, e.ItemId }).IsUnique();       // T-049: one dead letter per (instance, item) — repeated dead-lettering refreshes the row instead of duplicating it
     }
 }

@@ -54,6 +54,21 @@ public sealed class DeadLetterSink
         catch (Exception ex)   // store failure: Error with the exception as argument, never rethrown — at-least-once covers it (decision 4)
         {
             _logger.LogError(ex, "Dead-letter persistence failed for instance {InstanceId}, item {ItemId}, feed {FeedUrl}: {Message}", _instanceId, post.ItemId, post.SourceUrl, ex.Message);
+
+            // T-049: the dead-letter save (which clears the pending marker in the same commit) FAILED — best-effort clear so the item is retried next
+            // cycle rather than parked pending until restart. A failed clear still leaves at-least-once intact: startup cleanup removes any survivor.
+            try
+            {
+                await _store.ClearPendingAsync(_instanceId, post.ItemId, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;   // shutdown owns cancellation — same contract as the RecordDeadLetterAsync call above
+            }
+            catch (Exception clearEx)   // best-effort: log with the exception as argument and continue — never rethrown out of RecordAsync
+            {
+                _logger.LogError(clearEx, "Best-effort pending-marker clear failed for instance {InstanceId}, item {ItemId}: {Message}", _instanceId, post.ItemId, clearEx.Message);
+            }
         }
 
         // ONE structured Warning — the dead-letter decision log (no exception argument on the happy path).

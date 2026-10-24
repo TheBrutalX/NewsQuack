@@ -18,7 +18,7 @@ public class PersistenceRoundTripTests
     private static readonly DateTime FixedUtcPersisted = FixedUtc.UtcDateTime;
 
     [Fact]
-    public void Persistence_SaveAllFiveEntities_RoundTripsValues()
+    public void Persistence_SaveAllSixEntities_RoundTripsValues()
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"newsquack-t040-{Guid.NewGuid():N}.db");
 
@@ -59,6 +59,10 @@ public class PersistenceRoundTripTests
                     InstanceId = "instance-1", FeedUrl = "https://example.com/feed.xml", ItemId = "item-2",
                     PayloadJson = "{\"itemId\":\"item-2\"}", Attempts = 5, ErrorCategory = "429", LastError = "rate limited", FailedAtUtc = FixedUtcPersisted,
                 });
+                context.PendingItems.Add(new PendingItem   // T-049: the in-flight marker — one row per enqueued-but-unconfirmed (instance, item)
+                {
+                    InstanceId = "instance-1", ItemId = "item-3", EnqueuedAtUtc = FixedUtcPersisted,   // T-049: persisted as UTC DateTime
+                });
 
                 context.SaveChanges();
             }
@@ -85,6 +89,11 @@ public class PersistenceRoundTripTests
                 Assert.True(deadLetter.Id >= 1);   // rowid assigned by SQLite on insert
                 Assert.Equal(5, deadLetter.Attempts);
                 Assert.Equal("429", deadLetter.ErrorCategory);
+
+                var pending = context.PendingItems.Single();   // T-049: the marker row round-trips...
+                Assert.True(pending.Id >= 1);                  // ...with a rowid assigned by SQLite on insert...
+                Assert.Equal("instance-1", pending.InstanceId);
+                Assert.Equal(FixedUtcPersisted, pending.EnqueuedAtUtc);   // ...and EnqueuedAtUtc round-trips as UTC DateTime (T-049)
             }
         }
         finally

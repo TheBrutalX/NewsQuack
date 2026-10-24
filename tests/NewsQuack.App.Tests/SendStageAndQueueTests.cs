@@ -37,7 +37,7 @@ public class SendStageAndQueueTests
     public async Task Send_EnqueuesCurrentPostToThisInstancesQueueOnly()
     {
         var registry = new SendQueueRegistry(Config("inst-a", "inst-b"));   // one bounded queue per configured instance
-        var stage = new SendStage(registry, new LogCapture().For<SendStage>());
+        var stage = new SendStage(registry, new RecordingStateStore(), new LogCapture().For<SendStage>());
 
         var postA = Post("item-a");   // a post for instance A
         var postB = Post("item-b");   // a post for instance B
@@ -59,21 +59,44 @@ public class SendStageAndQueueTests
     public async Task Send_UnknownInstanceId_PropagatesKeyNotFoundException()
     {
         var registry = new SendQueueRegistry(Config("inst-a"));   // only "inst-a" is configured
-        var stage = new SendStage(registry, new LogCapture().For<SendStage>());
+        var store = new RecordingStateStore();
+        var stage = new SendStage(registry, store, new LogCapture().For<SendStage>());
 
         var ctx = new PostContext { InstanceId = "inst-unknown", CurrentPost = Post("item-x") };   // an instance with no queue
 
         await Assert.ThrowsAsync<KeyNotFoundException>(() => stage.ExecuteAsync(ctx));   // surfaced loudly — never a silent no-op
+        Assert.Empty(store.MarkPendingCalls);   // the registry throws BEFORE any marker write — an unknown instance never parks a pending row
     }
 
     [Fact]
     public void Send_Metadata_OrderHundredIsolateItemNamePinned()
     {
-        var stage = new SendStage(new SendQueueRegistry(Config("inst-a")), new LogCapture().For<SendStage>());
+        var stage = new SendStage(new SendQueueRegistry(Config("inst-a")), new RecordingStateStore(), new LogCapture().For<SendStage>());
 
         Assert.Equal(100, stage.Order);                              // the last stage — after dedup (10), filters (20), images (30), LLM (40)
         Assert.Equal("send", stage.Name);                            // stable string for structured logging
         Assert.Equal(FailurePolicy.IsolateItem, stage.FailurePolicy);   // the norm: on failure the runner drops the item (decision 4)
+    }
+
+    [Fact]
+    public async Task Send_MarksPendingBeforeEnqueue_ItemIsPendingInStoreAfterExecute()
+    {
+        var registry = new SendQueueRegistry(Config("inst-a"));
+        var store = new RecordingStateStore();
+        var stage = new SendStage(registry, store, new LogCapture().For<SendStage>());
+
+        var post = Post("item-a");
+        await stage.ExecuteAsync(new PostContext { InstanceId = "inst-a", CurrentPost = post });
+
+        // T-049: the in-flight marker was written for (instance, item) — a crash before dequeue leaves the row behind...
+        Assert.Single(store.MarkPendingCalls);
+        Assert.Equal(("inst-a", "item-a"), store.MarkPendingCalls[0]);
+        Assert.True(store.IsPending("inst-a", "item-a"));
+
+        // ...and the queue holds EXACTLY the one post (the marker never enqueues by itself — nothing to re-enqueue is created twice).
+        var queue = (BoundedSendQueue)registry.For("inst-a");
+        Assert.Same(post, await queue.ReadAsync());
+        Assert.False(queue.TryRead(out _));
     }
 
     [Fact]

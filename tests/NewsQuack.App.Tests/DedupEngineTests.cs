@@ -37,6 +37,25 @@ public class DedupEngineTests
         Assert.Equal((DedupTestPost.InstanceId, ItemId), store.IsDeliveredCalls[0]);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task IsPending_DelegatesToStoreWithInstanceIdAndItemId_ReturnsStoredValue(bool stored)
+    {
+        var store = new RecordingStateStore();
+        if (stored)
+            store.SeedPending(DedupTestPost.InstanceId, ItemId);   // T-049: the in-flight half of the dedup check
+
+        var engine = new DedupEngine(store, new LogCapture().For<DedupEngine>());
+
+        var pending = await engine.IsPendingAsync(DedupTestPost.InstanceId, ItemId);
+
+        Assert.Equal(stored, pending);
+        // Exactly one lookup with exactly the arguments the caller passed — same thin pass-through as IsDeliveredAsync (T-014 decision 1).
+        Assert.Single(store.IsPendingCalls);
+        Assert.Equal((DedupTestPost.InstanceId, ItemId), store.IsPendingCalls[0]);
+    }
+
     [Fact]
     public async Task ConfirmDelivery_PassesAllArgumentsThroughUnchanged()
     {

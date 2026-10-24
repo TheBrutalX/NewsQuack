@@ -9,7 +9,7 @@ namespace NewsQuack.App.Tests;
 public class AppDbContextTests
 {
     [Fact]
-    public void AppDbContext_TempSqlite_CreatesAllFiveTables()
+    public void AppDbContext_TempSqlite_CreatesAllSixTables()
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"newsquack-t001-{Guid.NewGuid():N}.db");
 
@@ -43,9 +43,10 @@ public class AppDbContextTests
                     "delivered_items",
                     "feed_state_rows",
                     "image_cache_entries",
+                    "pending_items",   // T-049: the in-flight marker table...
                     "youtube_channel_cache_entries",
                 },
-                tables.OrderBy(t => t).ToArray());   // exactly the five snake_case tables, nothing else
+                tables.OrderBy(t => t).ToArray());   // exactly the six snake_case tables, nothing else
         }
         finally
         {

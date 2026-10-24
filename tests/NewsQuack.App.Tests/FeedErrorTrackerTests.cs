@@ -47,6 +47,15 @@ public class FeedErrorTrackerTests
             => Task.FromResult(0);
 
         public Task RecordDeadLetterAsync(DeadLetterData deadLetter, CancellationToken ct = default) => Task.CompletedTask;   // T-022: the tracker never touches dead letters
+
+        // T-049: the tracker never touches pending markers — inert stubs keep the contract compiling
+        public Task MarkPendingAsync(string instanceId, string itemId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task ClearPendingAsync(string instanceId, string itemId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<bool> IsPendingAsync(string instanceId, string itemId, CancellationToken ct = default) => Task.FromResult(false);
+
+        public Task<int> CleanupAllPendingAsync(CancellationToken ct = default) => Task.FromResult(0);
     }
 
     private static (FeedErrorTracker Tracker, FakeStateStore Store, LogCapture Logs) CreateTracker(bool enableAutoRemove = true, int autoRemoveThreshold = 10)

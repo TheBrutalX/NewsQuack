@@ -187,9 +187,11 @@ static void AddStateStore(IServiceCollection services)
     services.AddHostedService<FeedStateRetentionService>();
 }
 
-// T-015: applies migration 001 (and any later migrations) on a factory-created context, before any worker starts. Returns false — after a
-// structured error log and a friendly stderr one-liner with no stack trace (boot error contract) — when the store cannot be initialized;
-// the caller exits 1. On success marks "store" ready so /readyz passes (only the health path registers that requirement).
+// T-015: applies migration 001 (and any later migrations) on a factory-created context, before any worker starts. T-049: then wipes every pending
+// (in-flight) row through the store — at that moment all of them belong to the previous (dead) process, and a failed cleanup fails boot like a failed
+// migration (the item would otherwise be skipped forever). Returns false — after a structured error log and a friendly stderr one-liner with no stack
+// trace (boot error contract) — when the store cannot be initialized; the caller exits 1. On success marks "store" ready so /readyz passes (only the
+// health path registers that requirement).
 static async Task<bool> MigrateStoreAsync(IServiceProvider services)
 {
     var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("NewsQuack.App");
@@ -200,6 +202,11 @@ static async Task<bool> MigrateStoreAsync(IServiceProvider services)
         await using var context = await contextFactory.CreateDbContextAsync();   // factory-created context, per the coordinator decision
         await context.Database.MigrateAsync();                                   // before any worker starts
 
+        // T-049: startup cleanup — data access stays inside the store (unit-testable); runs BEFORE any worker starts, so every pending row is stale.
+        var removed = await services.GetRequiredService<IStateStore>().CleanupAllPendingAsync();
+        if (removed > 0)
+            logger.LogInformation("Startup cleanup removed {RemovedCount} stale pending row(s) from the previous process", removed);
+
         if (services.GetService<ReadinessTracker>() is { } tracker)   // only the health path registers it
             tracker.MarkReady("store");
 
@@ -207,7 +214,7 @@ static async Task<bool> MigrateStoreAsync(IServiceProvider services)
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "State store migration failed: {Message}", ex.Message);   // structured log — exception as argument, stack trace survives
+        logger.LogError(ex, "State store startup failed (migration or pending cleanup): {Message}", ex.Message);   // structured log — exception as argument, stack trace survives
         Console.Error.WriteLine($"State store could not be initialized: {ex.Message}");   // friendly one-liner, no stack trace (boot error contract)
         return false;
     }

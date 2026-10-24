@@ -301,7 +301,9 @@ public class GracefulShutdownTests
 
     /// <summary>Decision 5: "at start re-enqueue the unconfirmed ones" is PINNED, not rebuilt. One cycle enqueues posts and nothing is confirmed; a "restart" = fresh
     /// queue + fresh scheduler over the SAME store ⇒ T-024's immediate first cycle re-parses the feed and T-014's persistent dedup lets every never-confirmed item
-    /// through again, so the unconfirmed posts reappear in the new queue. No replay mechanism exists — this test only proves the combination works.</summary>
+    /// through again, so the unconfirmed posts reappear in the new queue. No replay mechanism exists — this test only proves the combination works. T-049: like a real
+    /// boot, the simulated restart first runs the startup cleanup (the old run's pending markers are wiped), which is what keeps this re-enqueue working with the
+    /// in-flight marker in place.</summary>
     [Fact]
     public async Task Startup_AfterCrash_UnconfirmedPostsReenqueuedByFirstCycle()
     {
@@ -331,8 +333,8 @@ public class GracefulShutdownTests
         Assert.False(await harness.Store.IsDeliveredAsync(InstanceId, "https://example.com/first"));    // ...and nothing was confirmed in the store...
         Assert.False(await harness.Store.IsDeliveredAsync(InstanceId, "https://example.com/second"));   // ...the crash happened before any confirm
 
-        // --- restart: fresh queue + fresh scheduler over the SAME store ⇒ the first cycle re-parses and the unconfirmed posts reappear ---
-        var (scheduler2, registry2) = harness.BuildRestartedScheduler();
+        // --- restart: startup cleanup (T-049) + fresh queue + fresh scheduler over the SAME store ⇒ the first cycle re-parses and the unconfirmed posts reappear ---
+        var (scheduler2, registry2) = await harness.BuildRestartedSchedulerAsync();
         using var cts2 = new CancellationTokenSource();
         await scheduler2.StartAsync(cts2.Token);
 

@@ -37,6 +37,15 @@ public class FeedStateRetentionServiceTests
         }
 
         public Task RecordDeadLetterAsync(DeadLetterData deadLetter, CancellationToken ct = default) => Task.CompletedTask;   // T-022: retention never touches dead letters (later SP)
+
+        // T-049: retention never touches pending markers — inert stubs keep the contract compiling
+        public Task MarkPendingAsync(string instanceId, string itemId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task ClearPendingAsync(string instanceId, string itemId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<bool> IsPendingAsync(string instanceId, string itemId, CancellationToken ct = default) => Task.FromResult(false);
+
+        public Task<int> CleanupAllPendingAsync(CancellationToken ct = default) => Task.FromResult(0);
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

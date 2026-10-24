@@ -13,19 +13,27 @@ namespace NewsQuack.App.Tests;
 
 /// <summary>
 /// T-024 test seam: an in-memory <see cref="IStateStore"/> that persists feed-state rows (for the tracker's RecordAttempt/BackoffRemaining) AND
-/// delivered items (for the dedup stage) — the two halves of the contract the scheduler exercises. A lock guards both dictionaries because one
-/// cycle fetches its feeds in parallel (Task.WhenAll). One harness per test — no cross-test state.
+/// delivered items (for the dedup stage) — the two halves of the contract the scheduler exercises. T-049: it also models the pending (in-flight) set
+/// with real semantics — MarkDeliveredAsync and RecordDeadLetterAsync clear it exactly like the store's atomic commits, so a slow drain never
+/// re-enqueues an in-flight item. A lock guards all three collections because one cycle fetches its feeds in parallel (Task.WhenAll). One harness per test — no cross-test state.
 /// </summary>
 internal sealed class FakeFeedStateStore : IStateStore
 {
     private readonly object _gate = new();
     private readonly Dictionary<string, FeedState> _rows = new(StringComparer.Ordinal);
     private readonly HashSet<(string InstanceId, string ItemId)> _delivered = new();
+    private readonly HashSet<(string InstanceId, string ItemId)> _pending = new();   // T-049: the in-flight set — one entry per marked (instance, item)
 
     public void Seed(FeedState state) { lock (_gate) _rows[state.FeedUrl] = state; }
 
     /// <summary>T-047 test seam: seeds the delivered set directly (simulates a confirm from an earlier cycle without going through MarkDeliveredAsync).</summary>
     public void SeedDelivered(string instanceId, string itemId) { lock (_gate) _delivered.Add((instanceId, itemId)); }
+
+    /// <summary>T-049 test seam: seeds the pending set directly (simulates a marker write whose enqueue never happened — the crash between mark and enqueue).</summary>
+    public void SeedPending(string instanceId, string itemId) { lock (_gate) _pending.Add((instanceId, itemId)); }
+
+    /// <summary>T-049 test seam: true when the item is currently marked pending for that instance.</summary>
+    public bool IsPending(string instanceId, string itemId) { lock (_gate) return _pending.Contains((instanceId, itemId)); }
 
     public FeedState? GetRow(string feedUrl) { lock (_gate) return _rows.TryGetValue(feedUrl, out var row) ? row : null; }
 
@@ -44,13 +52,49 @@ internal sealed class FakeFeedStateStore : IStateStore
 
     public Task MarkDeliveredAsync(string instanceId, string feedUrl, string itemId, DateTimeOffset deliveredAtUtc, FeedState? newFeedState, CancellationToken ct = default)
     {
-        lock (_gate) _delivered.Add((instanceId, itemId));   // the real store marks delivered atomically with the state advance — same observable effect here
+        lock (_gate)
+        {
+            _delivered.Add((instanceId, itemId));   // the real store marks delivered atomically with the state advance — same observable effect here...
+            _pending.Remove((instanceId, itemId));  // ...and clears the pending marker in the SAME commit (T-049)
+        }
+
         return Task.CompletedTask;
     }
 
     public Task<int> CleanupOlderThanAsync(DateTimeOffset cutoffUtc, int batchSize = 1000, CancellationToken ct = default) => Task.FromResult(0);
 
-    public Task RecordDeadLetterAsync(DeadLetterData deadLetter, CancellationToken ct = default) => Task.CompletedTask;   // T-022: the scheduler never touches dead letters
+    public Task RecordDeadLetterAsync(DeadLetterData deadLetter, CancellationToken ct = default)
+    {
+        lock (_gate) _pending.Remove((deadLetter.InstanceId, deadLetter.ItemId));   // T-049: the real store clears the pending marker in the same SaveChanges as the dead-letter upsert (the scheduler never touches dead letters itself)
+        return Task.CompletedTask;
+    }
+
+    public Task MarkPendingAsync(string instanceId, string itemId, CancellationToken ct = default)
+    {
+        lock (_gate) _pending.Add((instanceId, itemId));   // T-049: upsert semantics — a re-mark is the normal case and simply succeeds (the set models the unique row)
+        return Task.CompletedTask;
+    }
+
+    public Task ClearPendingAsync(string instanceId, string itemId, CancellationToken ct = default)
+    {
+        lock (_gate) _pending.Remove((instanceId, itemId));   // no-op when absent — same as the real store
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> IsPendingAsync(string instanceId, string itemId, CancellationToken ct = default)
+    {
+        lock (_gate) return Task.FromResult(_pending.Contains((instanceId, itemId)));
+    }
+
+    public Task<int> CleanupAllPendingAsync(CancellationToken ct = default)
+    {
+        lock (_gate)   // T-049: startup cleanup — every pending entry belonged to a dead process; returns the removed count like the real store
+        {
+            var count = _pending.Count;
+            _pending.Clear();
+            return Task.FromResult(count);
+        }
+    }
 }
 
 /// <summary>
@@ -66,7 +110,7 @@ internal sealed class SchedulerTestHarness : IDisposable
 
     private readonly FeedFetcherTestHost _http;
     private readonly IServiceProvider _scopeProvider;
-    private readonly NewsquackConfig _config;   // T-031: kept so BuildRestartedScheduler can rebuild a FRESH send-queue registry over the same instances
+    private readonly NewsquackConfig _config;   // T-031: kept so BuildRestartedSchedulerAsync can rebuild a FRESH send-queue registry over the same instances
     private readonly string _instanceId;
     private readonly TimeSpan _pollInterval;
     private readonly IReadOnlyList<FeedConfig> _feeds;
@@ -91,7 +135,7 @@ internal sealed class SchedulerTestHarness : IDisposable
     {
         _http = http;
         _scopeProvider = scopeProvider;
-        _config = config;   // T-031: BuildRestartedScheduler rebuilds a fresh SendQueueRegistry from it
+        _config = config;   // T-031: BuildRestartedSchedulerAsync rebuilds a fresh SendQueueRegistry from it
         _instanceId = instanceId;
         _pollInterval = pollInterval;
         _feeds = feeds;
@@ -136,7 +180,7 @@ internal sealed class SchedulerTestHarness : IDisposable
         var registry = new SendQueueRegistry(config);
         var dedup = new DedupCheckStage(new DedupEngine(store, logs.For<DedupEngine>()), logs.For<DedupCheckStage>());
         var image = new ImageResolutionStage(config, logs.For<ImageResolutionStage>());
-        var send = new SendStage(registry, logs.For<SendStage>());
+        var send = new SendStage(registry, store, logs.For<SendStage>());   // T-049: the marker write goes through the same shared store (dedup skips delivered OR pending)
         var runner = new PostPipelineRunner(new IPostStage[] { dedup, image, send }, logs.For<PostPipelineRunner>());
 
         var tracker = new FeedErrorTracker(store, logs.For<FeedErrorTracker>(), enableAutoRemove: true, autoRemoveThreshold);
@@ -166,17 +210,20 @@ internal sealed class SchedulerTestHarness : IDisposable
     /// <summary>
     /// T-031 decision 5: simulates a process RESTART over the SAME store/tracker/parser/logs but with a FRESH per-instance send queue, a fresh stage chain
     /// wired to that queue, and a fresh scheduler. The re-enqueue mechanism is NOT invented here — it is T-024's immediate first cycle (re-parses every
-    /// feed at startup) plus T-014's persistent dedup (every never-confirmed item passes the check again). Returns the restarted scheduler and its fresh
-    /// registry so the test can read the new queue.
+    /// feed at startup) plus T-014's persistent dedup (every never-confirmed item passes the check again). T-049: like a real boot, the restart runs the
+    /// startup cleanup FIRST (Program.MigrateStoreAsync wipes every pending row before any worker starts — they all belong to the dead process), so an
+    /// in-flight marker from the old run never parks its item. Returns the restarted scheduler and its fresh registry so the test can read the new queue.
     /// </summary>
-    public (InstanceScheduler Scheduler, SendQueueRegistry Registry) BuildRestartedScheduler()
+    public async Task<(InstanceScheduler Scheduler, SendQueueRegistry Registry)> BuildRestartedSchedulerAsync()
     {
+        await Store.CleanupAllPendingAsync();   // T-049: the boot-time cleanup (Program.MigrateStoreAsync) — every pending row belonged to the dead process
+
         var registry = new SendQueueRegistry(_config);   // FRESH queues — the old process's queue is gone with it
 
         // The same real v1.0 stage chain as Create, but pointing at the fresh registry (and the SAME store — persistence is what survives a restart).
         var dedup = new DedupCheckStage(new DedupEngine(Store, Logs.For<DedupEngine>()), Logs.For<DedupCheckStage>());
         var image = new ImageResolutionStage(_config, Logs.For<ImageResolutionStage>());
-        var send = new SendStage(registry, Logs.For<SendStage>());
+        var send = new SendStage(registry, Store, Logs.For<SendStage>());   // T-049: the SAME store survives the restart — that is what makes pending rows meaningful across it
         var runner = new PostPipelineRunner([dedup, image, send], Logs.For<PostPipelineRunner>());
 
         return (new InstanceScheduler(

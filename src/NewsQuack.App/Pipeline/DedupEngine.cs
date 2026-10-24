@@ -5,8 +5,8 @@ namespace NewsQuack.App.Pipeline;
 
 /// <summary>
 /// T-014: persistent dedup per item-ID — a thin App-level engine over the frozen <see cref="IStateStore"/> contract. No logic of its own:
-/// <see cref="IsDeliveredAsync"/> is one indexed lookup, <see cref="ConfirmDeliveryAsync"/> is ONE atomic transaction (mark item delivered +
-/// advance feed state) inside the store. Stateless singleton serving all instances/feeds — thread-safety comes from the store (one context per
+/// <see cref="IsDeliveredAsync"/> and <see cref="IsPendingAsync"/> (T-049: the in-flight half) are one indexed lookup each,
+/// <see cref="ConfirmDeliveryAsync"/> is ONE atomic transaction (mark item delivered + advance feed state + clear the pending marker) inside the store. Stateless singleton serving all instances/feeds — thread-safety comes from the store (one context per
 /// operation). No caching in v1.0: SQLite reads are cheap; a cache is a later-SP optimization (T-014 decision 1).
 /// <para>
 /// Delivery is PER-INSTANCE: every call must pass the instance it belongs to — an item delivered to instance A is NOT delivered for instance B
@@ -39,6 +39,11 @@ public sealed class DedupEngine : IDedupEngine
     /// <remarks>Delegates unchanged to the store — no caching layer in front (T-014 decision 1).</remarks>
     public Task<bool> IsDeliveredAsync(string instanceId, string itemId, CancellationToken ct = default) =>
         _store.IsDeliveredAsync(instanceId, itemId, ct);
+
+    /// <inheritdoc/>
+    /// <remarks>T-049: the in-flight half of the dedup check — delegates unchanged to the store (same thin pass-through as <see cref="IsDeliveredAsync"/>).</remarks>
+    public Task<bool> IsPendingAsync(string instanceId, string itemId, CancellationToken ct = default) =>
+        _store.IsPendingAsync(instanceId, itemId, ct);
 
     /// <inheritdoc/>
     /// <remarks>

@@ -136,5 +136,26 @@ public class DeadLetterSinkTests : IDisposable
 
         // ...and the dead letter was still logged (the Warning is not suppressed by a store failure) — at-least-once covers persistence.
         Assert.NotNull(capture.Find(LogLevel.Warning, "Dead letter", "item-1"));
+
+        // T-049: the failure path still attempts the best-effort marker clear (a no-op in the real store when absent) — nothing was pending here.
+        Assert.Single(store.ClearPendingCalls);
+        Assert.Equal((InstanceId, "item-1"), store.ClearPendingCalls[0]);
+    }
+
+    [Fact]
+    public async Task Sink_StoreThrows_BestEffortClearsPendingMarker()
+    {
+        var capture = new LogCapture();
+        var store = new RecordingStateStore { RecordDeadLetterException = new InvalidOperationException("sqlite busy") };   // simulate a store outage at dead-letter time
+        store.SeedPending(InstanceId, "item-1");   // T-049: the item was IN FLIGHT (marker written) when it dead-lettered
+        var sink = CreateSink(store, capture);
+
+        await sink.RecordAsync(MakePost("item-1", "Doomed post", null), 3, TargetResult.Retryable(null, "HTTP 500"));   // must NOT throw (decision 4)
+
+        // T-049: the failed dead-letter save (which clears the marker in the same commit) leaves it behind — the sink clears it BEST-EFFORT so the item is
+        // retried next cycle rather than parked pending until restart.
+        Assert.Single(store.ClearPendingCalls);
+        Assert.Equal((InstanceId, "item-1"), store.ClearPendingCalls[0]);   // keyed by the sink's instance + the post's item id
+        Assert.False(store.IsPending(InstanceId, "item-1"));                // ...and the marker is gone — the next cycle re-delivers (at-least-once)
     }
 }

@@ -460,6 +460,8 @@ public class SendWorkerTests
     {
         public Task<bool> IsDeliveredAsync(string instanceId, string itemId, CancellationToken ct = default) => Task.FromResult(false);
 
+        public Task<bool> IsPendingAsync(string instanceId, string itemId, CancellationToken ct = default) => Task.FromResult(false);   // T-049: nothing in flight in the wiring test
+
         public Task ConfirmDeliveryAsync(string instanceId, string feedUrl, string itemId, DateTimeOffset deliveredAtUtc, FeedState? newFeedState, CancellationToken ct = default) => Task.CompletedTask;
     }
 }
