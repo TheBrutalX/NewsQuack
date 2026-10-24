@@ -63,6 +63,7 @@ internal sealed class SchedulerTestHarness : IDisposable
 
     private readonly FeedFetcherTestHost _http;
     private readonly IServiceProvider _scopeProvider;
+    private readonly NewsquackConfig _config;   // T-031: kept so BuildRestartedScheduler can rebuild a FRESH send-queue registry over the same instances
     private readonly string _instanceId;
     private readonly TimeSpan _pollInterval;
     private readonly IReadOnlyList<FeedConfig> _feeds;
@@ -82,11 +83,12 @@ internal sealed class SchedulerTestHarness : IDisposable
     public LogCapture Logs { get; }
 
     private SchedulerTestHarness(
-        FeedFetcherTestHost http, IServiceProvider scopeProvider, string instanceId, TimeSpan pollInterval, IReadOnlyList<FeedConfig> feeds,
+        FeedFetcherTestHost http, IServiceProvider scopeProvider, NewsquackConfig config, string instanceId, TimeSpan pollInterval, IReadOnlyList<FeedConfig> feeds,
         FakeFeedStateStore store, FeedErrorTracker tracker, SendQueueRegistry registry, PostPipelineRunner runner, IFeedParser parser, IServiceScopeFactory scopeFactory, LogCapture logs)
     {
         _http = http;
         _scopeProvider = scopeProvider;
+        _config = config;   // T-031: BuildRestartedScheduler rebuilds a fresh SendQueueRegistry from it
         _instanceId = instanceId;
         _pollInterval = pollInterval;
         _feeds = feeds;
@@ -137,7 +139,7 @@ internal sealed class SchedulerTestHarness : IDisposable
         var tracker = new FeedErrorTracker(store, logs.For<FeedErrorTracker>(), enableAutoRemove: true, autoRemoveThreshold);
         var parser = new FeedParser(logs.For<FeedParser>(), new FeedItemMapper(new FeedDateParser(logs.For<FeedDateParser>()), null));   // generic strategy for non-platform URLs
 
-        return new SchedulerTestHarness(http, scopeProvider, instanceId, pollInterval, feeds, store, tracker, registry, runner, parser, scopeFactory, logs);
+        return new SchedulerTestHarness(http, scopeProvider, config, instanceId, pollInterval, feeds, store, tracker, registry, runner, parser, scopeFactory, logs);
     }
 
     /// <summary>The absolute URL of a feed path (for reading the matching store row).</summary>
@@ -157,6 +159,34 @@ internal sealed class SchedulerTestHarness : IDisposable
         _runner,         // the real v1.0 stage chain built in Create
         _scopeFactory,   // scoped LogEnricher — one scope per cycle and per feed (T-004)
         Logs.For<InstanceScheduler>());
+
+    /// <summary>
+    /// T-031 decision 5: simulates a process RESTART over the SAME store/tracker/parser/logs but with a FRESH per-instance send queue, a fresh stage chain
+    /// wired to that queue, and a fresh scheduler. The re-enqueue mechanism is NOT invented here — it is T-024's immediate first cycle (re-parses every
+    /// feed at startup) plus T-014's persistent dedup (every never-confirmed item passes the check again). Returns the restarted scheduler and its fresh
+    /// registry so the test can read the new queue.
+    /// </summary>
+    public (InstanceScheduler Scheduler, SendQueueRegistry Registry) BuildRestartedScheduler()
+    {
+        var registry = new SendQueueRegistry(_config);   // FRESH queues — the old process's queue is gone with it
+
+        // The same real v1.0 stage chain as Create, but pointing at the fresh registry (and the SAME store — persistence is what survives a restart).
+        var dedup = new DedupCheckStage(new DedupEngine(Store, Logs.For<DedupEngine>()), Logs.For<DedupCheckStage>());
+        var image = new ImageResolutionStage(_config, Logs.For<ImageResolutionStage>());
+        var send = new SendStage(registry, Logs.For<SendStage>());
+        var runner = new PostPipelineRunner([dedup, image, send], Logs.For<PostPipelineRunner>());
+
+        return (new InstanceScheduler(
+            _instanceId,
+            _pollInterval,
+            _feeds,
+            _http.Fetcher,   // the same fetch layer — a real restart would build a fresh one; only process-local caches differ, which this test does not exercise
+            Tracker,         // tracker state lives in the store rows — shared across the "restart" exactly like a new process over the same DB
+            _parser,
+            runner,
+            _scopeFactory,
+            Logs.For<InstanceScheduler>()), registry);
+    }
 
     public void Dispose()
     {

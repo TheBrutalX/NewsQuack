@@ -14,12 +14,17 @@ namespace NewsQuack.App.Sending;
 /// decision after MaxAttempts (or immediately on permanent failure) by calling this instance's <see cref="DeadLetterSink"/> (T-022: persist +
 /// one structured Warning log + system-webhook notification — the worker no longer logs dead letters itself), and confirming delivery to the
 /// dedup engine ONLY after a Delivered outcome, which is what makes the whole scheme at-least-once. A per-post exception is logged (Error) and
-/// the loop continues: one bad post never kills this instance's delivery loop.
+/// the loop continues: one bad post never kills this instance's delivery loop. T-031: when the host stops, the worker does not drop its queue —
+/// it drains whatever is still pending within a bounded window (<see cref="DefaultDrainTimeoutSeconds"/> by default, env-var configurable), so
+/// shutdown is lossless within the at-least-once contract.
 /// </summary>
 public sealed class SendWorker : BackgroundService
 {
     /// <summary>The v1.0 retry budget — one fixed constant, no config key (decision 3).</summary>
     public const int MaxAttempts = 5;
+
+    /// <summary>The v1.0 shutdown drain window in seconds — the production default (T-031 decision 2); the env var only overrides it, it never invents a schema key.</summary>
+    public const int DefaultDrainTimeoutSeconds = 30;
 
     private readonly string _instanceId;
     private readonly BoundedSendQueue _queue;      // internal ReadAsync — the single reader this queue exists to feed (T-024)
@@ -33,6 +38,7 @@ public sealed class SendWorker : BackgroundService
     private readonly TimeSpan _backoffBase;        // production default: 2 s
     private readonly TimeSpan _backoffCap;         // production default: 60 s
     private readonly Func<double> _jitterSource;   // production default: Random.Shared.NextDouble — [0,1)
+    private readonly TimeSpan _drainTimeout;       // production default: 30 s (T-031 decision 2) — genuinely configurable at registration via the env var (decision 4)
 
     public SendWorker(
         string instanceId,
@@ -44,7 +50,8 @@ public sealed class SendWorker : BackgroundService
         ILogger<SendWorker> logger,
         TimeSpan? backoffBase = null,      // test-only: production default 2 s — deterministic-timing injectable (decision 1)
         TimeSpan? backoffCap = null,       // test-only: production default 60 s — deterministic-timing injectable (decision 1)
-        Func<double>? jitterSource = null) // test-only: production default Random.Shared.NextDouble, [0,1) (decision 1)
+        Func<double>? jitterSource = null, // test-only: production default Random.Shared.NextDouble, [0,1) (decision 1)
+        TimeSpan? drainTimeout = null)     // T-031 decision 2: production default 30 s — set from the env var at registration (decision 4); tests inject small windows
     {
         ArgumentNullException.ThrowIfNull(instanceId);
         ArgumentNullException.ThrowIfNull(queue);
@@ -67,6 +74,7 @@ public sealed class SendWorker : BackgroundService
         _backoffBase = backoffBase ?? TimeSpan.FromSeconds(2);       // production default (decision 1) — not a config key
         _backoffCap = backoffCap ?? TimeSpan.FromSeconds(60);        // production default (decision 1) — not a config key
         _jitterSource = jitterSource ?? Random.Shared.NextDouble;   // [0,1) full-jitter source (decision 1)
+        _drainTimeout = drainTimeout ?? TimeSpan.FromSeconds(DefaultDrainTimeoutSeconds);   // production default 30 s (T-031 decision 2/4) — not a config key
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -93,7 +101,7 @@ public sealed class SendWorker : BackgroundService
                 // Decision 2: a post dequeued and then lost to cancellation mid-retry is simply dropped with a Debug log — it was never confirmed, so the next
                 // scheduler cycle re-parses the feed and re-enqueues it (at-least-once via re-polling; no re-queueing mechanism in v1.0).
                 _logger.LogDebug("Instance {InstanceId} stopped while processing item {ItemId} — not confirmed, the next cycle will re-deliver it", _instanceId, post.ItemId);
-                break;   // shutdown owns cancellation — stop cleanly
+                break;   // shutdown owns cancellation — stop cleanly, then drain whatever is still queued (T-031 decision 2)
             }
             catch (Exception ex)   // per-post catch-all: one bad post must never kill this instance's delivery loop (impact table)
             {
@@ -101,7 +109,49 @@ public sealed class SendWorker : BackgroundService
             }
         }
 
-        _logger.LogDebug("Send worker stopped for instance {InstanceId}", _instanceId);   // clean cancellation reached the loop condition / a break above
+        await DrainAsync();   // T-031 decision 2: the stopping token fired — give whatever is still queued a bounded window to be delivered and confirmed
+
+        _logger.LogDebug("Send worker stopped for instance {InstanceId}", _instanceId);   // clean cancellation reached the loop condition / a break above, then the drain finished
+    }
+
+    /// <summary>
+    /// T-031 decision 2: the bounded shutdown drain. The schedulers are already stopped (registration order — decision 1), so no new posts can arrive and the queue
+    /// only ever empties. deadline = now + _drainTimeout; each post is processed with a DRAIN-DEADLINE token (a CTS cancelled at the deadline, NOT the stopping
+    /// token) so in-flight retry waits can complete inside the window. An OCE from that token drops the post unconfirmed (Debug log — the next start re-delivers
+    /// it, at-least-once) and ends the drain; an empty queue ends it immediately. Info logs mark the start (instance id, pending count, window) and the end
+    /// (processed vs dropped). Everything is awaited — no sync-over-async in the shutdown path (decision 6).
+    /// </summary>
+    private async Task DrainAsync()
+    {
+        using var drainCts = new CancellationTokenSource();
+        drainCts.CancelAfter(_drainTimeout);   // deadline = now + _drainTimeout — a CTS timer on the UTC clock, no local time
+
+        var processed = 0;
+        var dropped = 0;
+
+        _logger.LogInformation("Shutdown drain started for instance {InstanceId}: {PendingCount} post(s) pending, window {DrainTimeout}", _instanceId, _queue.PendingCount, _drainTimeout);
+
+        while (_queue.TryRead(out var post))
+        {
+            try
+            {
+                await ProcessPostAsync(post, drainCts.Token);   // the DRAIN-DEADLINE token, not the stopping token — retry waits complete inside the window (decision 2)
+                processed++;   // completed — confirmed or dead-lettered (a post dead-lettered during drain is normal operation, decision 7)
+            }
+            catch (OperationCanceledException) when (drainCts.IsCancellationRequested)
+            {
+                dropped++;   // lost to the deadline — unconfirmed, the next start re-delivers it (at-least-once)
+                _logger.LogDebug("Drain deadline reached for instance {InstanceId} while processing item {ItemId} — not confirmed, the next start will re-deliver it", _instanceId, post.ItemId);
+                break;   // the window is spent — end the drain (decision 2)
+            }
+            catch (Exception ex)   // per-post isolation: one bad post must never abort the whole drain (same policy as the normal loop)
+            {
+                processed++;   // failed but handled by the per-post catch-all — not dropped by the deadline
+                _logger.LogError(ex, "Send processing failed during shutdown drain for item {ItemId} from feed {FeedUrl}: {Message}", post.ItemId, post.SourceUrl, ex.Message);
+            }
+        }
+
+        _logger.LogInformation("Shutdown drain finished for instance {InstanceId}: {ProcessedCount} processed (confirmed or dead-lettered), {DroppedCount} dropped unconfirmed", _instanceId, processed, dropped);
     }
 
     /// <summary>Per-post enrichment (decision 5): create a scope, resolve the scoped LogEnricher, Set(instanceId, post.SourceUrl), activate around

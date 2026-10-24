@@ -39,6 +39,9 @@ public sealed class BoundedSendQueue : ISendQueue
 
     /// <summary>Internal non-blocking read (tests + a worker's drain): true and a post when one is available right now, else false — never waits.</summary>
     internal bool TryRead([MaybeNullWhen(false)] out Post post) => _channel.Reader.TryRead(out post);
+
+    /// <summary>Internal pending-post count (T-031's drain start log + tests): <see cref="Channel{T}.Reader.Count"/> — cheaply known, no extra state.</summary>
+    internal int PendingCount => _channel.Reader.Count;
 }
 
 /// <summary>

@@ -26,6 +26,7 @@ Every value of the v2 config schema can be overridden from an environment variab
 | `NEWSQUACK_CONFIG` | config file *location* (not a value override) | first found of: CLI argument, `./newsquack.json`, `/config/newsquack.json` |
 | `NEWSQUACK_DATABASE` | SQLite database file *path* (not a value override) — the state store migrates it at boot; its parent directory is created when missing | `/data/newsquack.db` (Docker mount point) |
 | `NEWSQUACK_DEADLETTER_WEBHOOK` | dead-letter notification webhook URL (operational env var, not a schema key): when set, every dead letter also POSTs a JSON notification here; missing/empty ⇒ disabled, present but not an absolute http(s) URL ⇒ disabled with a startup Warning | unset (disabled) |
+| `NEWSQUACK_SHUTDOWN_DRAIN_TIMEOUT_SECONDS` | shutdown drain window in seconds (operational env var, not a schema key): when the host stops, each send worker keeps processing its queue for at most this long before dropping remaining posts unconfirmed (they are re-delivered on the next start); missing/empty ⇒ 30 s default, invalid or non-positive ⇒ 30 s + startup Warning | 30 |
 | `NEWSQUACK_HTTP__FEEDTIMEOUTSECONDS` | `Http.FeedTimeoutSeconds` — feed fetch timeout in seconds (> 0) | 30 |
 | `NEWSQUACK_HTTP__DISCORDTIMEOUTSECONDS` | `Http.DiscordTimeoutSeconds` — Discord send timeout in seconds (> 0) | 15 |
 | `NEWSQUACK_HTTP__IMAGETIMEOUTSECONDS` | `Http.ImageTimeoutSeconds` — image fetch timeout in seconds (> 0) | 15 |

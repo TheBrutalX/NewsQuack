@@ -68,11 +68,11 @@ if (health.Enabled)
 
     webBuilder.Services.AddPostPipeline();         // T-024: runner + ImageResolutionStage + SendStage + send-queue registry (same wiring as the generic host path)
 
-    webBuilder.Services.AddInstanceScheduling(config);   // T-024: one per-instance scheduler — same wiring as the generic host path
+    webBuilder.Services.AddDeadLettering(config);   // T-022: dead-letter persistence + system webhook notifier — registered BEFORE the workers: their factories resolve the per-instance sink
 
-    webBuilder.Services.AddDeadLettering(config);   // T-022: dead-letter persistence + system webhook notifier — same wiring as the generic host path
+    webBuilder.Services.AddSendWorkers(config);   // T-031 decision 1: registered BEFORE the schedulers ⇒ the host (reverse registration order) stops the schedulers first, then each worker drains its queue within the bounded window
 
-    webBuilder.Services.AddSendWorkers(config);   // T-021: one per-instance send worker + its Discord target — same wiring as the generic host path
+    webBuilder.Services.AddInstanceScheduling(config);   // T-024: one per-instance scheduler — registered LAST among these ⇒ stopped FIRST on shutdown (T-031 decision 1)
 
     // T-015: "store" is a readiness requirement registered at wiring time — /readyz answers 503 (missing ["store"]) until the
     // startup migration succeeds. T-030 itself registers no requirements; this factory is where its own wiring declares them.
@@ -134,11 +134,11 @@ else
 
     builder.Services.AddPostPipeline();         // T-024: runner + ImageResolutionStage + SendStage + send-queue registry (same wiring as the health path)
 
-    builder.Services.AddInstanceScheduling(config);   // T-024: one per-instance scheduler — runs regardless of the health listener
+    builder.Services.AddDeadLettering(config);   // T-022: dead-letter persistence + system webhook notifier — registered BEFORE the workers: their factories resolve the per-instance sink
 
-    builder.Services.AddDeadLettering(config);   // T-022: dead-letter persistence + system webhook notifier — runs regardless of the health listener
+    builder.Services.AddSendWorkers(config);   // T-031 decision 1: registered BEFORE the schedulers ⇒ the host (reverse registration order) stops the schedulers first, then each worker drains its queue within the bounded window
 
-    builder.Services.AddSendWorkers(config);   // T-021: one per-instance send worker + its Discord target — runs regardless of the health listener
+    builder.Services.AddInstanceScheduling(config);   // T-024: one per-instance scheduler — registered LAST among these ⇒ stopped FIRST on shutdown (T-031 decision 1)
 
     var host = builder.Build();
 
@@ -173,6 +173,10 @@ static void AddStateStore(IServiceCollection services)
 
     // The frozen contract — later workers/pipeline resolve IStateStore, never the concrete type.
     services.AddSingleton<IStateStore, SqliteStateStore>();
+
+    // T-031 decision 3: WAL checkpoint on graceful shutdown — registered BEFORE the retention service so the host's reverse-order stop runs it LAST,
+    // after the schedulers stopped and the send workers drained their queues. A failed checkpoint logs Error and never rethrows (it cannot crash host stop).
+    services.AddHostedService<StoreCheckpointService>();
 
     // 24 h retention job (30-day cutoff, batch 1000) — constants per the coordinator decision, no config keys invented.
     services.AddHostedService<FeedStateRetentionService>();
