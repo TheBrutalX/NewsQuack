@@ -7,7 +7,7 @@
 
 ## 1. What this system is
 
-Newsquack is a self-hosted **.NET 10** service that polls RSS/Atom feeds and YouTube channels and delivers every new post to **pluggable notification targets**. It is an improved reimplementation of NewsQuack. Discord (webhook: embed / forum / markdown) is the only target in v1.0; Telegram, Slack, Rocket Chat and generic webhooks are planned for later releases. It runs as a single Docker container in **multi-instance mode**: one config file describes N instances, each with its own feeds, check interval and webhook URL.
+NewsQuack is a self-hosted **.NET 10** service that polls RSS/Atom feeds and YouTube channels and delivers every new post to **pluggable notification targets**. It is an improved reimplementation of NewsQuack. Discord (webhook: embed / forum / markdown) is the only target in v1.0; Telegram, Slack, Rocket Chat and generic webhooks are planned for later releases. It runs as a single Docker container in **multi-instance mode**: one config file describes N instances, each with its own feeds, check interval and webhook URL.
 
 How a post flows through the system:
 

@@ -1,6 +1,6 @@
 # PROCESS — Development Process
 
-This document is the **complete** definition of how Newsquack is developed: branch model, task lifecycle, GitHub tracking, subagent access rules and commit conventions. `AGENTS.md` at the repo root carries a binding summary for development subagents; when in doubt about *why* a rule exists, read this document.
+This document is the **complete** definition of how NewsQuack is developed: branch model, task lifecycle, GitHub tracking, subagent access rules and commit conventions. `AGENTS.md` at the repo root carries a binding summary for development subagents; when in doubt about *why* a rule exists, read this document.
 
 ---
 

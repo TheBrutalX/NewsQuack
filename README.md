@@ -1,8 +1,8 @@
-# Newsquack 🦆
+# NewsQuack 🦆
 
 > *The duck that never misses a feed.*
 
-A self-hosted .NET 10 service that polls RSS/Atom feeds and YouTube channels and delivers every new post to pluggable notification targets (Discord in v1.0), with reliable at-least-once delivery, persistent item-ID dedup and a stage-based post pipeline. Newsquack is an improved reimplementation of [NewsQuack](https://github.com/NewsQuack).
+A self-hosted .NET 10 service that polls RSS/Atom feeds and YouTube channels and delivers every new post to pluggable notification targets (Discord in v1.0), with reliable at-least-once delivery, persistent item-ID dedup and a stage-based post pipeline. NewsQuack is an improved reimplementation of [NewsQuack](https://github.com/NewsQuack).
 
 ## Status: M1 complete — v1.0 release pending
 
