@@ -61,7 +61,7 @@ internal static class AppBootHelper
         var config = segments[binIndex + 1];
 
         var dir = baseDir;   // walk up to the solution root (same pattern as FixtureLoader)
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Newsquack.sln")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "NewsQuack.sln")))
             dir = dir.Parent;
         if (dir is null) return (dotnet, null);
 

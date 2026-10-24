@@ -3,14 +3,14 @@ namespace NewsQuack.App.Tests;
 
 /// <summary>
 /// Resolves the shared feed fixtures under tests/fixtures/ relative to the solution root:
-/// walks up from the test assembly location until Newsquack.sln is found, so the helper works
+/// walks up from the test assembly location until NewsQuack.sln is found, so the helper works
 /// from any build output layout (Debug/Release, redirected output dirs, CI checkouts).
 /// </summary>
 public static class FixtureLoader
 {
     private static string? _solutionRoot;
 
-    /// <summary>Absolute path of the directory containing Newsquack.sln (cached after first resolution).</summary>
+    /// <summary>Absolute path of the directory containing NewsQuack.sln (cached after first resolution).</summary>
     public static string SolutionRoot
     {
         get
@@ -18,11 +18,11 @@ public static class FixtureLoader
             if (_solutionRoot is not null) return _solutionRoot;
 
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Newsquack.sln")))
+            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "NewsQuack.sln")))
                 dir = dir.Parent;
 
             if (dir is null)
-                throw new InvalidOperationException("Could not locate Newsquack.sln above the test assembly location.");
+                throw new InvalidOperationException("Could not locate NewsQuack.sln above the test assembly location.");
 
             _solutionRoot = dir.FullName;
             return _solutionRoot;

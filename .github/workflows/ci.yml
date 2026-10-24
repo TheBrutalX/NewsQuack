@@ -32,7 +32,7 @@ jobs:
       # findings) are suppressed here so they only *report* as warnings, not fail this job. The dedicated
       # `audit` job below is the vulnerability gate.
       - name: Build (warnings as errors)
-        run: dotnet build Newsquack.sln -c Release -warnaserror /p:NoWarn=NU1901%3BNU1902
+        run: dotnet build NewsQuack.sln -c Release -warnaserror /p:NoWarn=NU1901%3BNU1902
 
       # --no-build reuses the Release build above; coverlet.msbuild still emits coverage.cobertura.xml and
       # enforces the per-project Threshold (verified locally).
@@ -70,7 +70,7 @@ jobs:
       # WarningsAsErrors in Directory.Build.props, NU1901/NU1902 (low/moderate) stay warnings. No blanket
       # -warnaserror here, so low/moderate findings do not fail the job.
       - name: Audit NuGet packages (fail on high/critical)
-        run: dotnet restore Newsquack.sln
+        run: dotnet restore NewsQuack.sln
 
   docker-push:
     runs-on: ubuntu-latest

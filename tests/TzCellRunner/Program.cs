@@ -144,15 +144,15 @@ internal static class Program
 
     private static bool IsSupportedCulture(string name) => name is "invariant" or "de-DE" or "it-IT";
 
-    /// <summary>Walks up from the runner assembly location to the directory containing Newsquack.sln (same approach as FixtureLoader).</summary>
+    /// <summary>Walks up from the runner assembly location to the directory containing NewsQuack.sln (same approach as FixtureLoader).</summary>
     private static string FindSolutionRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Newsquack.sln")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "NewsQuack.sln")))
             dir = dir.Parent;
 
         if (dir is null)
-            throw new InvalidOperationException("Could not locate Newsquack.sln above the runner assembly location.");
+            throw new InvalidOperationException("Could not locate NewsQuack.sln above the runner assembly location.");
 
         return dir.FullName;
     }

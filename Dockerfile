@@ -5,13 +5,13 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Project files + central package management first -> `dotnet restore` is a stable, cacheable layer.
-COPY Directory.Build.props Directory.Packages.props Newsquack.sln ./
+COPY Directory.Build.props Directory.Packages.props NewsQuack.sln ./
 COPY src/NewsQuack.Core/NewsQuack.Core.csproj src/NewsQuack.Core/
 COPY src/NewsQuack.Infrastructure/NewsQuack.Infrastructure.csproj src/NewsQuack.Infrastructure/
 COPY src/NewsQuack.App/NewsQuack.App.csproj src/NewsQuack.App/
 COPY tests/NewsQuack.Core.Tests/NewsQuack.Core.Tests.csproj tests/NewsQuack.Core.Tests/
 COPY tests/NewsQuack.App.Tests/NewsQuack.App.Tests.csproj tests/NewsQuack.App.Tests/
-RUN dotnet restore Newsquack.sln
+RUN dotnet restore NewsQuack.sln
 
 # Sources, then publish framework-dependent (self-contained off: the runtime image provides the shared framework).
 COPY . .

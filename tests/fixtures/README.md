@@ -5,7 +5,7 @@ integration test that needs a realistic feed document). All files are valid UTF-
 XML *except* where a fixture explicitly encodes a defect, and small (< 20 KB).
 
 Load them through `FixtureLoader` in the test projects (resolves paths relative to the solution
-root — walk up from the test assembly location until `Newsquack.sln` is found) instead of
+root — walk up from the test assembly location until `NewsQuack.sln` is found) instead of
 hard-coding paths.
 
 ## Well-formed fixtures
