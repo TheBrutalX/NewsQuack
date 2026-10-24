@@ -6,6 +6,7 @@ using NewsQuack.App.Logging;
 using NewsQuack.App.Pipeline;                // T-014: dedup engine + DedupCheckStage (Order 10); T-024: runner + v1.0 stages + send queues
 using NewsQuack.App.Parsing;                 // T-012: feed parser (two-pass) + date parser + item mapper
 using NewsQuack.App.Scheduling;              // T-024: per-instance scheduler (one BackgroundService per configured instance)
+using NewsQuack.App.Sending;                 // T-021: per-instance send worker (one BackgroundService per configured instance)
 using NewsQuack.App.Services;                // T-015: retention job
 using NewsQuack.Core;                        // T-015: IStateStore contract
 using NewsQuack.Infrastructure.Persistence;  // T-015: AppDbContext / SqliteStateStore / connection interceptor
@@ -69,6 +70,8 @@ if (health.Enabled)
 
     webBuilder.Services.AddInstanceScheduling(config);   // T-024: one per-instance scheduler — same wiring as the generic host path
 
+    webBuilder.Services.AddSendWorkers(config);   // T-021: one per-instance send worker + its Discord target — same wiring as the generic host path
+
     // T-015: "store" is a readiness requirement registered at wiring time — /readyz answers 503 (missing ["store"]) until the
     // startup migration succeeds. T-030 itself registers no requirements; this factory is where its own wiring declares them.
     webBuilder.Services.AddSingleton<ReadinessTracker>(sp =>
@@ -130,6 +133,8 @@ else
     builder.Services.AddPostPipeline();         // T-024: runner + ImageResolutionStage + SendStage + send-queue registry (same wiring as the health path)
 
     builder.Services.AddInstanceScheduling(config);   // T-024: one per-instance scheduler — runs regardless of the health listener
+
+    builder.Services.AddSendWorkers(config);   // T-021: one per-instance send worker + its Discord target — runs regardless of the health listener
 
     var host = builder.Build();
 

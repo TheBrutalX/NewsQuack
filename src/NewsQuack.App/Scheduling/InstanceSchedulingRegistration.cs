@@ -3,7 +3,8 @@ using NewsQuack.App.Fetching;        // IFeedFetcher — the fetch layer under t
 using NewsQuack.App.Pipeline;        // PostPipelineRunner — the ordered stage chain (T-024)
 using NewsQuack.App.Services;        // IFeedErrorTracker — backoff + auto-remove (T-016 + decision 7)
 using NewsQuack.Core;                // IFeedParser — two-pass, per-item isolation (T-012/T-013)
-using Microsoft.Extensions.DependencyInjection;   // IServiceCollection + AddHostedService
+using Microsoft.Extensions.DependencyInjection;   // IServiceCollection + ServiceDescriptor (plain Add — see the per-instance registration below)
+using Microsoft.Extensions.Hosting;   // IHostedService — the host owns each scheduler's start/stop/cancellation
 using Microsoft.Extensions.Logging;   // ILogger<T>
 
 namespace NewsQuack.App.Scheduling;
@@ -30,7 +31,7 @@ public static class InstanceSchedulingRegistration
             var pollInterval = TimeSpan.FromMinutes(minutes);   // registration converts CheckIntervalMinutes → TimeSpan (decision 6)
             var feeds = instance.Feeds ?? [];                    // validated: at least one feed per instance
 
-            services.AddHostedService(sp => new InstanceScheduler(
+            services.Add(ServiceDescriptor.Singleton<IHostedService>(sp => new InstanceScheduler(   // plain Add (NOT AddHostedService): since .NET 9 that overload is TryAddEnumerable, which would silently drop every instance after the first — one scheduler per configured instance is the point (found while wiring T-021's workers)
                 instance.Id,
                 pollInterval,
                 feeds,
@@ -39,7 +40,7 @@ public static class InstanceSchedulingRegistration
                 sp.GetRequiredService<IFeedParser>(),         // T-012/T-013 — two-pass, per-item isolation
                 sp.GetRequiredService<PostPipelineRunner>(),  // T-024 — the ordered stage chain (resolves IPostStage, never concrete types)
                 sp.GetRequiredService<IServiceScopeFactory>(),// scoped LogEnricher (T-004) — one scope per cycle and per feed
-                sp.GetRequiredService<ILogger<InstanceScheduler>>()));
+                sp.GetRequiredService<ILogger<InstanceScheduler>>())));   // closes InstanceScheduler( / Singleton( / Add( — one descriptor per configured instance
         }
 
         return services;

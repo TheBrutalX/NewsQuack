@@ -20,6 +20,12 @@ internal sealed class RecordingStateStore : IStateStore
     /// <summary>When set, IsDeliveredAsync throws this instead of answering (pins that the stage propagates store failures — it must not swallow them).</summary>
     public Exception? IsDeliveredException { get; set; }
 
+    /// <summary>When set, MarkDeliveredAsync throws this AFTER recording the call but BEFORE marking delivered (T-021: simulates a store failure at confirm time).</summary>
+    public Exception? MarkDeliveredException { get; set; }
+
+    /// <summary>True when the item is marked delivered for that instance — the worker's observable "confirmed" state.</summary>
+    public bool IsDelivered(string instanceId, string itemId) => _delivered.ContainsKey((instanceId, itemId));
+
     /// <summary>Seeds the delivered state directly (simulates a confirm from an earlier cycle without going through MarkDeliveredAsync).</summary>
     public void SeedDelivered(string instanceId, string itemId) => _delivered[(instanceId, itemId)] = 0;
 
@@ -40,6 +46,9 @@ internal sealed class RecordingStateStore : IStateStore
     public Task MarkDeliveredAsync(string instanceId, string feedUrl, string itemId, DateTimeOffset deliveredAtUtc, FeedState? newFeedState, CancellationToken ct = default)
     {
         MarkDeliveredCalls.Add((instanceId, feedUrl, itemId, deliveredAtUtc, newFeedState));
+
+        if (MarkDeliveredException is { } ex)
+            throw ex;   // the call was recorded but the item stays UNDELIVERED — exactly what a store failure at confirm time means (T-021)
 
         _delivered[(instanceId, itemId)] = 0;   // the real store marks delivered atomically with the state advance — same observable effect here
         return Task.CompletedTask;
