@@ -42,6 +42,7 @@ public static class SendWorkerRegistration
                 sp.GetRequiredKeyedService<INotificationTarget>(instanceId),  // THIS instance's target — keyed so instances never share a target
                 sp.GetRequiredService<IDedupEngine>(),                        // T-014 — confirm ONLY after Delivered (at-least-once)
                 sp.GetRequiredService<IServiceScopeFactory>(),                // scoped LogEnricher (T-004) — one scope per post
+                sp.GetRequiredKeyedService<DeadLetterSink>(instanceId),       // T-022: THIS instance's dead-letter sink — keyed so instances never share a sink (AddDeadLettering)
                 sp.GetRequiredService<ILogger<SendWorker>>())));   // closes SendWorker( / Singleton( / Add( — one descriptor per configured instance
         }
 

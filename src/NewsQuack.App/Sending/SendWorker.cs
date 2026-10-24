@@ -11,9 +11,10 @@ namespace NewsQuack.App.Sending;
 /// T-021: the per-instance single-reader send worker — one <see cref="BackgroundService"/> per configured instance, host-managed
 /// (start/stop/cancellation). Drains this instance's bounded queue and sends each post through the instance's target, retrying transient
 /// failures with bounded exponential backoff + full jitter (NEVER waiting less than a target-supplied RetryAfter), making the dead-letter
-/// decision after MaxAttempts (or immediately on permanent failure) as one structured Error log — persistence is T-022 — and confirming
-/// delivery to the dedup engine ONLY after a Delivered outcome, which is what makes the whole scheme at-least-once. A per-post exception
-/// is logged (Error) and the loop continues: one bad post never kills this instance's delivery loop.
+/// decision after MaxAttempts (or immediately on permanent failure) by calling this instance's <see cref="DeadLetterSink"/> (T-022: persist +
+/// one structured Warning log + system-webhook notification — the worker no longer logs dead letters itself), and confirming delivery to the
+/// dedup engine ONLY after a Delivered outcome, which is what makes the whole scheme at-least-once. A per-post exception is logged (Error) and
+/// the loop continues: one bad post never kills this instance's delivery loop.
 /// </summary>
 public sealed class SendWorker : BackgroundService
 {
@@ -25,6 +26,7 @@ public sealed class SendWorker : BackgroundService
     private readonly INotificationTarget _target;  // THIS instance's target — the worker owns all retry logic, never the target (contract)
     private readonly IDedupEngine _dedup;          // confirm ONLY after Delivered — at-least-once hinges on this (T-014)
     private readonly IServiceScopeFactory _scopeFactory;   // scoped LogEnricher — one scope per post (T-004)
+    private readonly DeadLetterSink _sink;         // T-022: persist + Warning-log + notify at the dead-letter decision points (decision 6) — THIS instance's sink
     private readonly ILogger<SendWorker> _logger;
 
     // Test-only injectables with production defaults (decision 1): constructor injectability for deterministic tests — NOT config keys (schema frozen).
@@ -38,6 +40,7 @@ public sealed class SendWorker : BackgroundService
         INotificationTarget target,
         IDedupEngine dedup,
         IServiceScopeFactory scopeFactory,
+        DeadLetterSink sink,                       // T-022: this instance's dead-letter sink — keyed singleton (decision 6/7)
         ILogger<SendWorker> logger,
         TimeSpan? backoffBase = null,      // test-only: production default 2 s — deterministic-timing injectable (decision 1)
         TimeSpan? backoffCap = null,       // test-only: production default 60 s — deterministic-timing injectable (decision 1)
@@ -48,6 +51,7 @@ public sealed class SendWorker : BackgroundService
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(dedup);
         ArgumentNullException.ThrowIfNull(scopeFactory);
+        ArgumentNullException.ThrowIfNull(sink);
         ArgumentNullException.ThrowIfNull(logger);
 
         if (queue is not BoundedSendQueue bounded)
@@ -58,6 +62,7 @@ public sealed class SendWorker : BackgroundService
         _target = target;
         _dedup = dedup;
         _scopeFactory = scopeFactory;
+        _sink = sink;
         _logger = logger;
         _backoffBase = backoffBase ?? TimeSpan.FromSeconds(2);       // production default (decision 1) — not a config key
         _backoffCap = backoffCap ?? TimeSpan.FromSeconds(60);        // production default (decision 1) — not a config key
@@ -142,7 +147,7 @@ public sealed class SendWorker : BackgroundService
                     return;
 
                 case TargetOutcome.PermanentFailure:
-                    DeadLetter(post, attempt, result.Error ?? "permanent failure");   // immediate dead-letter — no retries (decision 3)
+                    await _sink.RecordAsync(post, attempt, result, ct);   // T-022: immediate dead letter — persist + Warning log + notify via the sink (no retries)
                     return;
 
                 case TargetOutcome.Retryable:
@@ -155,7 +160,7 @@ public sealed class SendWorker : BackgroundService
                     }
                     else
                     {
-                        DeadLetter(post, attempt, result.Error ?? "retryable failure");   // budget exhausted ⇒ dead-letter with the last error (decision 3/4)
+                        await _sink.RecordAsync(post, attempt, result, ct);   // T-022: budget exhausted ⇒ dead-letter with the last error (decision 3/4)
                     }
 
                     break;
@@ -196,12 +201,5 @@ public sealed class SendWorker : BackgroundService
         {
             _logger.LogError(ex, "Item was sent but not confirmed — it may be delivered again on the next cycle: instance {InstanceId}, item {ItemId}, feed {FeedUrl}: {Message}", _instanceId, post.ItemId, post.SourceUrl, ex.Message);
         }
-    }
-
-    /// <summary>v1.0 dead-letter (decision 4): the decision point + one structured Error log carrying instance id, item id, feed url, post title, attempts made and
-    /// the classified last error (retry-after/5xx/timeout/permanent as reported by the target) — then drop. T-022 persists the entry and hooks into exactly this point.</summary>
-    private void DeadLetter(Post post, int attemptsMade, string lastError)
-    {
-        _logger.LogError("Dead letter: instance {InstanceId}, item {ItemId}, feed {FeedUrl}, title \"{Title}\", attempts made {AttemptsMade}, last error: {LastError}", _instanceId, post.ItemId, post.SourceUrl, post.Title, attemptsMade, lastError);
     }
 }

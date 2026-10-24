@@ -70,6 +70,8 @@ if (health.Enabled)
 
     webBuilder.Services.AddInstanceScheduling(config);   // T-024: one per-instance scheduler — same wiring as the generic host path
 
+    webBuilder.Services.AddDeadLettering(config);   // T-022: dead-letter persistence + system webhook notifier — same wiring as the generic host path
+
     webBuilder.Services.AddSendWorkers(config);   // T-021: one per-instance send worker + its Discord target — same wiring as the generic host path
 
     // T-015: "store" is a readiness requirement registered at wiring time — /readyz answers 503 (missing ["store"]) until the
@@ -133,6 +135,8 @@ else
     builder.Services.AddPostPipeline();         // T-024: runner + ImageResolutionStage + SendStage + send-queue registry (same wiring as the health path)
 
     builder.Services.AddInstanceScheduling(config);   // T-024: one per-instance scheduler — runs regardless of the health listener
+
+    builder.Services.AddDeadLettering(config);   // T-022: dead-letter persistence + system webhook notifier — runs regardless of the health listener
 
     builder.Services.AddSendWorkers(config);   // T-021: one per-instance send worker + its Discord target — runs regardless of the health listener
 

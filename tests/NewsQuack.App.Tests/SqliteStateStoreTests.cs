@@ -202,6 +202,32 @@ public class SqliteStateStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task RecordDeadLetter_PersistsAllFields_RoundTripsThroughSqlite()
+    {
+        await MigrateAsync();   // T-022: the dead_letter_entries table comes from T-015's InitialCreate — no new migration (decision 1)
+
+        var data = new DeadLetterData(
+            "instance-1", "https://example.com/feed.xml", "item-9",
+            """{"ItemId":"item-9","Title":"Broken post"}""",   // the full post payload as JSON — the store persists it verbatim
+            5, "429", "Discord rate limit", FixedUtc);
+
+        await _store.RecordDeadLetterAsync(data);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var row = await db.DeadLetterEntries.SingleAsync();
+
+        Assert.True(row.Id >= 1);   // rowid assigned by SQLite on insert
+        Assert.Equal("instance-1", row.InstanceId);
+        Assert.Equal("https://example.com/feed.xml", row.FeedUrl);
+        Assert.Equal("item-9", row.ItemId);
+        Assert.Equal(data.PayloadJson, row.PayloadJson);   // the full payload round-trips byte-for-byte...
+        Assert.Equal(5, row.Attempts);                     // ...every field including the classified category and the last error...
+        Assert.Equal("429", row.ErrorCategory);
+        Assert.Equal("Discord rate limit", row.LastError);
+        Assert.Equal(FixedUtc.UtcDateTime, row.FailedAtUtc);   // UTC boundary conversion: contract DateTimeOffset → persisted UTC DateTime (T-015 style)
+    }
+
+    [Fact]
     public async Task CleanupOlderThan_RemovesOnlyOldRowsAcrossMultipleBatches()
     {
         await MigrateAsync();

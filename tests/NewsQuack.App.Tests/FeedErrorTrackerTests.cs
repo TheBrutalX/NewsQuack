@@ -45,6 +45,8 @@ public class FeedErrorTrackerTests
 
         public Task<int> CleanupOlderThanAsync(DateTimeOffset cutoffUtc, int batchSize = 1000, CancellationToken ct = default)
             => Task.FromResult(0);
+
+        public Task RecordDeadLetterAsync(DeadLetterData deadLetter, CancellationToken ct = default) => Task.CompletedTask;   // T-022: the tracker never touches dead letters
     }
 
     private static (FeedErrorTracker Tracker, FakeStateStore Store, LogCapture Logs) CreateTracker(bool enableAutoRemove = true, int autoRemoveThreshold = 10)

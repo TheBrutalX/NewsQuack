@@ -35,6 +35,8 @@ public class FeedStateRetentionServiceTests
 
             return Task.FromResult(RowsToRemove);
         }
+
+        public Task RecordDeadLetterAsync(DeadLetterData deadLetter, CancellationToken ct = default) => Task.CompletedTask;   // T-022: retention never touches dead letters (later SP)
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

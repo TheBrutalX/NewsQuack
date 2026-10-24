@@ -46,6 +46,8 @@ internal sealed class FakeFeedStateStore : IStateStore
     }
 
     public Task<int> CleanupOlderThanAsync(DateTimeOffset cutoffUtc, int batchSize = 1000, CancellationToken ct = default) => Task.FromResult(0);
+
+    public Task RecordDeadLetterAsync(DeadLetterData deadLetter, CancellationToken ct = default) => Task.CompletedTask;   // T-022: the scheduler never touches dead letters
 }
 
 /// <summary>

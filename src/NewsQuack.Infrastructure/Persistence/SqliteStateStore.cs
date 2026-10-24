@@ -126,6 +126,28 @@ public sealed class SqliteStateStore : IStateStore
         return totalRemoved;
     }
 
+    public async Task RecordDeadLetterAsync(DeadLetterData deadLetter, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(deadLetter);
+
+        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+
+        // Single-row insert — no transaction needed. The table comes from T-015's InitialCreate (no new migration, T-022 decision 1).
+        db.DeadLetterEntries.Add(new DeadLetterEntry
+        {
+            InstanceId = deadLetter.InstanceId,
+            FeedUrl = deadLetter.FeedUrl,
+            ItemId = deadLetter.ItemId,
+            PayloadJson = deadLetter.PayloadJson,   // full post payload as JSON — serialized by the caller (T-022)
+            Attempts = deadLetter.Attempts,
+            ErrorCategory = deadLetter.ErrorCategory,   // "429" / "5xx" / "timeout" / "400-payload" — classified by the caller (T-022)
+            LastError = deadLetter.LastError,
+            FailedAtUtc = deadLetter.FailedAtUtc.UtcDateTime,   // boundary conversion: contract DateTimeOffset → persisted UTC DateTime
+        });
+
+        await db.SaveChangesAsync(ct);
+    }
+
     private static async Task<FeedStateRow> LoadOrCreateFeedStateRowAsync(AppDbContext db, FeedState state, CancellationToken ct)
     {
         var row = await db.FeedStateRows.FirstOrDefaultAsync(r => r.FeedUrl == state.FeedUrl, ct);

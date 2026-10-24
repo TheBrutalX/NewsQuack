@@ -84,7 +84,7 @@ public class SendWorkerRetryTests
         await host.Worker.StartAsync(cts.Token);
         await host.Queue.EnqueueAsync(MakePost(), cts.Token);
 
-        await WaitUntilAsync(() => host.Capture.Find(LogLevel.Error, "Dead letter", ItemId) is not null, "the dead-letter decision");
+        await WaitUntilAsync(() => host.Capture.Find(LogLevel.Warning, "Dead letter", ItemId) is not null, "the dead-letter decision");   // T-022: the dead-letter log now lives in the sink as a Warning
         await host.Worker.StopAsync(CancellationToken.None);
 
         Assert.Equal(5, host.Calls);   // EXACTLY MaxAttempts sends — no sixth try, no early give-up (decision 4)
@@ -94,9 +94,12 @@ public class SendWorkerRetryTests
         Assert.True(total < TimeSpan.FromSeconds(10), $"waited {total} — far beyond the pinned 375 ms: no runaway retry loop");
 
         var deadLetter = host.Capture.Snapshot();
-        Assert.Single(deadLetter, e => e.Level == LogLevel.Error && e.Message.Contains("Dead letter"));   // ONE Error dead-letter log...
-        Assert.Contains("attempts made 5", deadLetter.First(e => e.Level == LogLevel.Error && e.Message.Contains("Dead letter")).Message);   // ...with attempts made...
-        Assert.Contains("HTTP 503", deadLetter.First(e => e.Level == LogLevel.Error && e.Message.Contains("Dead letter")).Message);          // ...and the classified last error as reported by the target (T-020 mapping)
+        Assert.Single(deadLetter, e => e.Level == LogLevel.Warning && e.Message.Contains("Dead letter"));   // ONE Warning dead-letter log (T-022: moved from Error to the sink)...
+        Assert.Contains("attempts made 5", deadLetter.First(e => e.Level == LogLevel.Warning && e.Message.Contains("Dead letter")).Message);   // ...with attempts made...
+        Assert.Contains("HTTP 503", deadLetter.First(e => e.Level == LogLevel.Warning && e.Message.Contains("Dead letter")).Message);          // ...and the last error as reported by the target (T-020 mapping)
+
+        Assert.Single(host.Store.RecordDeadLetterCalls);   // T-022: and the dead letter was persisted through the sink...
+        Assert.Equal("5xx", host.Store.RecordDeadLetterCalls[0].ErrorCategory);   // ...classified "5xx" for the always-503 scenario
 
         Assert.Empty(host.Store.MarkDeliveredCalls);   // never confirmed — at-least-once: re-polling re-delivers it
     }
@@ -272,9 +275,14 @@ public class SendWorkerRetryTests
 
             var dedup = new DedupEngine(store, capture.For<DedupEngine>());   // real engine over the recording store — confirm arguments are assertable
 
+            // T-022: the REAL sink over the SAME recording store + a disabled notifier (null URL) — dead letters persist and log through exactly the production path.
+            var sink = new DeadLetterSink(InstanceId, store,
+                new DeadLetterNotifier(null, provider.GetRequiredService<IHttpClientFactory>(), capture.For<DeadLetterNotifier>()),
+                capture.For<DeadLetterSink>());
+
             var worker = new SendWorker(
                 InstanceId, queue, target, dedup,
-                provider.GetRequiredService<IServiceScopeFactory>(), capture.For<SendWorker>(),
+                provider.GetRequiredService<IServiceScopeFactory>(), sink, capture.For<SendWorker>(),
                 backoffBase: backoffBase, backoffCap: backoffCap, jitterSource: jitterSource);   // test-only injectables — deterministic timing (T-021 decision 1)
 
             return new RetryHost(server, queue, worker, store, capture, provider);

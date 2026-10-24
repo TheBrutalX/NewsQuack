@@ -61,6 +61,30 @@ public class ContractRecordsTests
     }
 
     [Fact]
+    public void DeadLetterData_AllFields_PreservesValues()   // T-022: the additive dead-letter contract record (decision 2)
+    {
+        var data = new DeadLetterData(
+            "instance-1", "https://example.com/feed.xml", "item-9", """{"ItemId":"item-9"}""", 5, "429", "Discord rate limit", FixedUtc);
+
+        Assert.Equal("instance-1", data.InstanceId);
+        Assert.Equal("https://example.com/feed.xml", data.FeedUrl);
+        Assert.Equal("item-9", data.ItemId);
+        Assert.Equal("""{"ItemId":"item-9"}""", data.PayloadJson);   // the full post payload as JSON — carried verbatim to the store
+        Assert.Equal(5, data.Attempts);
+        Assert.Equal("429", data.ErrorCategory);                     // one of "429" / "5xx" / "timeout" / "400-payload" (entity taxonomy)
+        Assert.Equal("Discord rate limit", data.LastError);
+        Assert.Equal(FixedUtc, data.FailedAtUtc);                    // UTC only — the store converts at the boundary
+    }
+
+    [Fact]
+    public void DeadLetterData_NullLastError_RemainsNull()   // T-022: a dead letter may carry no error string (the classifier still buckets it)
+    {
+        var data = new DeadLetterData("instance-1", "https://example.com/feed.xml", "item-9", "{}", 5, "5xx", null, FixedUtc);
+
+        Assert.Null(data.LastError);
+    }
+
+    [Fact]
     public void PostContext_SkipAndPostReplacement_UpdateState()
     {
         var post = new Post

@@ -23,6 +23,12 @@ internal sealed class RecordingStateStore : IStateStore
     /// <summary>When set, MarkDeliveredAsync throws this AFTER recording the call but BEFORE marking delivered (T-021: simulates a store failure at confirm time).</summary>
     public Exception? MarkDeliveredException { get; set; }
 
+    /// <summary>Every RecordDeadLetterAsync call in order — all arguments as received (T-022: dead-letter persistence is assertable).</summary>
+    public List<DeadLetterData> RecordDeadLetterCalls { get; } = [];
+
+    /// <summary>When set, RecordDeadLetterAsync throws this AFTER recording the call but BEFORE persisting (T-022: simulates a store failure at dead-letter time).</summary>
+    public Exception? RecordDeadLetterException { get; set; }
+
     /// <summary>True when the item is marked delivered for that instance — the worker's observable "confirmed" state.</summary>
     public bool IsDelivered(string instanceId, string itemId) => _delivered.ContainsKey((instanceId, itemId));
 
@@ -55,4 +61,14 @@ internal sealed class RecordingStateStore : IStateStore
     }
 
     public Task<int> CleanupOlderThanAsync(DateTimeOffset cutoffUtc, int batchSize = 1000, CancellationToken ct = default) => Task.FromResult(0);
+
+    public Task RecordDeadLetterAsync(DeadLetterData deadLetter, CancellationToken ct = default)
+    {
+        RecordDeadLetterCalls.Add(deadLetter);
+
+        if (RecordDeadLetterException is { } ex)
+            throw ex;   // the call was recorded but the row stays UNPERSISTED — exactly what a store failure at dead-letter time means (T-022)
+
+        return Task.CompletedTask;
+    }
 }

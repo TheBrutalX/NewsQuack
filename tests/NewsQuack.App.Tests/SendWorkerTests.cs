@@ -1,4 +1,5 @@
 using System.Diagnostics;   // Stopwatch — deterministic-timing assertions (pinned jitter, not wall-clock luck)
+using System.Text.Json;     // JsonDocument — asserting key fields in the persisted dead-letter payload (T-022)
 using NewsQuack.App.Configuration;   // NewsquackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the registration is built from config
 using NewsQuack.App.Http;            // AddNewsquackHttpClients — the "discord" named client the target resolves (T-005)
 using NewsQuack.App.Logging;         // LogEnricher — registered Scoped, resolved per post scope by the worker (decision 5)
@@ -17,9 +18,10 @@ namespace NewsQuack.App.Tests;
 
 /// <summary>
 /// T-021: the per-instance single-reader send worker — retry policy with the RetryAfter floor + full jitter, MaxAttempts=5 dead-letter decision
-/// point (structured Error log), confirm-only-after-Delivered with null newFeedState, per-post enrichment, target exceptions as transient failures,
-/// and clean cancellation. Uses a scriptable fake INotificationTarget (per-attempt outcomes), the REAL BoundedSendQueue (small capacity), the REAL
-/// DedupEngine over the recording store fake (confirm arguments assertable), and the test-only ctor parameters for deterministic timing.
+/// point (T-022: persisted via the real sink + structured Warning log), confirm-only-after-Delivered with null newFeedState, per-post enrichment,
+/// target exceptions as transient failures, and clean cancellation. Uses a scriptable fake INotificationTarget (per-attempt outcomes), the REAL
+/// BoundedSendQueue (small capacity), the REAL DedupEngine over the recording store fake (confirm arguments assertable), the REAL DeadLetterSink
+/// over that same recording store (dead-letter calls assertable — T-022), and the test-only ctor parameters for deterministic timing.
 /// </summary>
 public class SendWorkerTests
 {
@@ -55,12 +57,18 @@ public class SendWorkerTests
         // Scoped LogEnricher (T-004): the worker creates one scope per post — this minimal container supplies it (same pattern as SchedulerTestHarness).
         var services = new ServiceCollection();
         services.AddScoped<LogEnricher>();
+        services.AddHttpClient(NamedHttpClientRegistration.DiscordClientName);   // T-022: the sink's (disabled) notifier resolves through this factory — exactly what production registers (T-005)
         var provider = services.BuildServiceProvider();
 
         var dedup = new DedupEngine(store, capture.For<DedupEngine>());   // real engine over the recording store — confirm arguments are assertable
 
+        // T-022: the REAL sink over the SAME recording store + a disabled notifier (null URL) — dead letters persist and log through exactly the production path.
+        var sink = new DeadLetterSink(InstanceId, store,
+            new DeadLetterNotifier(null, provider.GetRequiredService<IHttpClientFactory>(), capture.For<DeadLetterNotifier>()),
+            capture.For<DeadLetterSink>());
+
         var worker = new SendWorker(
-            InstanceId, queue, target, dedup, provider.GetRequiredService<IServiceScopeFactory>(), capture.For<SendWorker>(),
+            InstanceId, queue, target, dedup, provider.GetRequiredService<IServiceScopeFactory>(), sink, capture.For<SendWorker>(),
             backoffBase: backoffBase, backoffCap: backoffCap, jitterSource: jitterSource);   // test-only injectables — deterministic timing (decision 1)
 
         return new WorkerHarness(worker, store, capture, provider);
@@ -181,20 +189,22 @@ public class SendWorkerTests
         await queue.EnqueueAsync(Post("item-a", "Failing post"));
         await queue.EnqueueAsync(Post("item-b", "Next post"));
 
-        // item-a's dead-letter decision appears first...
-        await WaitUntilAsync(() => harness.Capture.Find(LogLevel.Error, "Dead letter", "item-a") is not null, "the dead-letter decision for item-a");
+        // item-a's dead-letter decision appears first... (T-022: the dead-letter log now lives in the sink as a Warning, not an Error)
+        await WaitUntilAsync(() => harness.Capture.Find(LogLevel.Warning, "Dead letter", "item-a") is not null, "the dead-letter decision for item-a");
 
-        var deadLetter = harness.Capture.Find(LogLevel.Error, "Dead letter", "item-a")!;   // ! safe: the wait above guarantees the entry exists
+        var deadLetter = harness.Capture.Find(LogLevel.Warning, "Dead letter", "item-a")!;   // ! safe: the wait above guarantees the entry exists
         Assert.Equal(5, target.SentCountFor("item-a"));   // EXACTLY MaxAttempts for the failing post — no sixth try...
 
         // ...and the worker CONTINUES to the next post (which dead-letters too — the target always fails).
-        await WaitUntilAsync(() => harness.Capture.Find(LogLevel.Error, "Dead letter", "item-b") is not null, "the next post to be processed");
+        await WaitUntilAsync(() => harness.Capture.Find(LogLevel.Warning, "Dead letter", "item-b") is not null, "the next post to be processed");
 
         Assert.Contains("attempts made 5", deadLetter.Message);   // attempts made...
-        Assert.Contains("HTTP 503", deadLetter.Message);          // ...and the classified last error as reported by the target (decision 4)...
-        Assert.Contains(FeedUrl, deadLetter.Message);             // ...and the feed url — one structured Error line carries everything T-022 will persist
+        Assert.Contains("HTTP 503", deadLetter.Message);          // ...and the last error as reported by the target (decision 4)...
+        Assert.Contains(FeedUrl, deadLetter.Message);             // ...and the feed url — one structured Warning line carries everything T-022 persists...
 
         await harness.Worker.StopAsync(CancellationToken.None);
+
+        Assert.Equal(2, harness.Store.RecordDeadLetterCalls.Count);   // ...and BOTH dead letters were persisted through the sink (T-022 decision 6)
 
         Assert.DoesNotContain(harness.Store.MarkDeliveredCalls, c => c.ItemId == "item-a");   // never confirmed — at-least-once: re-polling re-delivers it
     }
@@ -211,11 +221,72 @@ public class SendWorkerTests
         await harness.Worker.StartAsync(cts.Token);
         await queue.EnqueueAsync(Post("item-a", "Rejected post"));
 
-        await WaitUntilAsync(() => harness.Capture.Find(LogLevel.Error, "Dead letter", "item-a") is not null, "the immediate dead-letter");
+        await WaitUntilAsync(() => harness.Capture.Find(LogLevel.Warning, "Dead letter", "item-a") is not null, "the immediate dead-letter");   // T-022: Warning via the sink, not an Error from the worker
         await harness.Worker.StopAsync(CancellationToken.None);
 
         Assert.Equal(1, target.SentCount);   // EXACTLY one call — PermanentFailure dead-letters immediately (decision 3)
-        Assert.DoesNotContain(harness.Store.MarkDeliveredCalls, c => c.ItemId == "item-a");   // never confirmed
+        Assert.DoesNotContain(harness.Store.MarkDeliveredCalls, c => c.ItemId == "item-a");   // never confirmed...
+        Assert.Single(harness.Store.RecordDeadLetterCalls);   // ...but persisted through the sink as a dead letter (T-022 decision 6)
+    }
+
+    [Fact]
+    public async Task Worker_MaxAttemptsExhausted_PersistsDeadLetterWith5xxCategoryAndFullPayload()
+    {
+        var queue = new BoundedSendQueue(capacity: 1);
+        var target = new ScriptedTarget([p => TargetResult.Retryable(null, "HTTP 503")]);   // always 503 — the retry budget must exhaust
+
+        using var harness = CreateWorker(target, queue, backoffBase: TimeSpan.FromMilliseconds(1), jitterSource: () => 1.0);   // waits of 1+2+4+8 ms — fast and deterministic
+        using var cts = new CancellationTokenSource();
+
+        await harness.Worker.StartAsync(cts.Token);
+        await queue.EnqueueAsync(Post("item-a", "Failing post"));
+
+        await WaitUntilAsync(() => harness.Store.RecordDeadLetterCalls.Count == 1, "the dead letter to be persisted");
+        await harness.Worker.StopAsync(CancellationToken.None);
+
+        var data = harness.Store.RecordDeadLetterCalls[0];   // ! safe: the wait above guarantees the entry
+        Assert.Equal(InstanceId, data.InstanceId);           // the sink's instance id...
+        Assert.Equal(FeedUrl, data.FeedUrl);                 // ...post.SourceUrl as the feed url...
+        Assert.Equal("item-a", data.ItemId);                 // ...the post's stable dedup key...
+        Assert.Equal(SendWorker.MaxAttempts, data.Attempts); // attempts = 5 — exactly the exhausted budget (decision 4)...
+        Assert.Equal("5xx", data.ErrorCategory);             // ...category "5xx" — T-020's "HTTP 503" shape (classifier decision 3)...
+        Assert.Equal("HTTP 503", data.LastError);            // ...and the last error as reported by the target...
+        Assert.True(data.FailedAtUtc.Offset == TimeSpan.Zero);   // UTC only (AGENTS.md)
+
+        // The FULL post payload is persisted as JSON — key fields present.
+        using var document = JsonDocument.Parse(data.PayloadJson);
+        var root = document.RootElement;
+        Assert.Equal("item-a", root.GetProperty("ItemId").GetString());
+        Assert.Equal("Failing post", root.GetProperty("Title").GetString());
+
+        // The decision left exactly ONE structured Warning (the sink's) — no Error-level dead-letter log remains (T-022 decision 6).
+        Assert.NotNull(harness.Capture.Find(LogLevel.Warning, "Dead letter", "item-a"));
+        Assert.Null(harness.Capture.Find(LogLevel.Error, "Dead letter"));
+
+        Assert.Empty(harness.Store.MarkDeliveredCalls);   // never confirmed — at-least-once: re-polling re-delivers it
+    }
+
+    [Fact]
+    public async Task Worker_PermanentFailure_PersistsDeadLetterWith400PayloadCategory()
+    {
+        var queue = new BoundedSendQueue(capacity: 1);
+        var target = new ScriptedTarget([p => TargetResult.PermanentFailure("403: forbidden")]);   // permanent — the retry budget is skipped entirely
+
+        using var harness = CreateWorker(target, queue);
+        using var cts = new CancellationTokenSource();
+
+        await harness.Worker.StartAsync(cts.Token);
+        await queue.EnqueueAsync(Post("item-a", "Rejected post"));
+
+        await WaitUntilAsync(() => harness.Store.RecordDeadLetterCalls.Count == 1, "the immediate dead letter");
+        await harness.Worker.StopAsync(CancellationToken.None);
+
+        var data = harness.Store.RecordDeadLetterCalls[0];   // ! safe: the wait above guarantees the entry
+        Assert.Equal(1, data.Attempts);                      // exactly one attempt — PermanentFailure dead-letters immediately (decision 3)...
+        Assert.Equal("400-payload", data.ErrorCategory);     // ...category "400-payload" — v1.0's only permanent class (classifier decision 3)...
+        Assert.Equal("403: forbidden", data.LastError);      // ...and the target's error string preserved verbatim
+
+        Assert.Empty(harness.Store.MarkDeliveredCalls);   // never confirmed — at-least-once: re-polling re-delivers it
     }
 
     [Fact]
@@ -320,6 +391,8 @@ public class SendWorkerTests
             services.AddSingleton<NewsquackConfig>(config);              // T-024: the validated config singleton — same as Program.cs
             services.AddSingleton(sp => new SendQueueRegistry(sp.GetRequiredService<NewsquackConfig>()));   // T-024: one queue per configured instance
             services.AddSingleton<IDedupEngine>(_ => new NoopDedup());  // the worker resolves it at construction — a no-op is enough for wiring
+            services.AddSingleton<IStateStore>(new RecordingStateStore());   // T-022: the sink persists through the frozen contract — the recording fake is enough for wiring
+            services.AddDeadLettering(config);                          // T-022: the per-instance dead-letter sinks + notifier — part of Program.cs's exact wiring
             services.AddSendWorkers(config);                            // the exact wiring Program.cs uses on both host paths
 
             using var provider = services.BuildServiceProvider();
