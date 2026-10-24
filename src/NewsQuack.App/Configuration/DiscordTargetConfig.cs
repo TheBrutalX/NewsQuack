@@ -21,4 +21,9 @@ public sealed class DiscordTargetConfig
     /// <summary>Optional http(s) URL with a host, used when an item has no image of its own.</summary>
     [HttpUrl]
     public string? FallbackImageUrl { get; init; }
+
+    /// <summary>T-048: minimum interval in seconds between two requests to this webhook URL (1..60). Omitted ⇒ default 2 s (≤ 30 req/min — Discord's
+    /// per-webhook limit). Shared across instances configured with the same webhook URL; the strictest (smallest) interval wins on conflict.</summary>
+    [Range(1, 60)]
+    public int? MinSendIntervalSeconds { get; init; }
 }

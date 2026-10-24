@@ -1,4 +1,5 @@
 using NewsQuack.App.Configuration;
+using NewsQuack.App.Discord;              // T-048: AddWebhookPacing — the shared per-webhook-URL pacer registry (built from the validated config)
 using NewsQuack.App.Fetching;             // T-010: feed fetcher + global throttle + UA cascade + robots handling
 using NewsQuack.App.Health;
 using NewsQuack.App.Http;                 // T-005: named HTTP clients + anti-SSRF redirect handler
@@ -50,6 +51,8 @@ if (health.Enabled)
     // T-005: three named clients (feed/discord/image) with per-client timeouts from the validated config and one shared anti-SSRF redirect
     // handler in every pipeline — "discord" is what T-020's target resolves. One wiring method for both host paths.
     webBuilder.Services.AddNewsquackHttpClients(config.Http);
+
+    webBuilder.Services.AddWebhookPacing(config);   // T-048: shared per-webhook-URL pacer registry from the validated config — the "discord" client's pacing handler resolves it (same wiring as the generic host path)
 
     webBuilder.Services.AddFeedFetching();   // T-010: the fetch layer on top of the named clients (same wiring as the generic host path)
 
@@ -113,6 +116,8 @@ else
 
     // T-005: exactly the wiring of the health path above — both hosts get the three named clients with config timeouts and the shared handler.
     builder.Services.AddNewsquackHttpClients(config.Http);
+
+    builder.Services.AddWebhookPacing(config);   // T-048: exactly the pacer-registry wiring of the health path above
 
     builder.Services.AddFeedFetching();   // T-010: exactly the fetch-layer wiring of the health path above
 

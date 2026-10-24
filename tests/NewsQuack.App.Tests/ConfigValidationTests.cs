@@ -103,6 +103,25 @@ public class ConfigValidationTests
     }
 
     [Fact]
+    public void ConfigValidation_MinSendIntervalSecondsOutOfRange_ZeroAndSixtyOne_BothReportedInRange1To60()
+    {
+        // T-048: the new key is checked at boot through its [Range(1, 60)] attribute — the explicit ValidateProperty line in ConfigValidator.ValidateDiscord is what makes it so.
+        var low = $$"""{ "WebhookUrl": "{{ConfigTestHelper.WebhookUrl}}", "MinSendIntervalSeconds": 0 }""";
+        var high = $$"""{ "WebhookUrl": "{{ConfigTestHelper.WebhookUrl}}", "MinSendIntervalSeconds": 61 }""";
+
+        var json = ConfigTestHelper.Config(
+            ConfigTestHelper.Instance("a", 15, discord: low),
+            ConfigTestHelper.Instance("b", 15, discord: high));
+
+        var (ok, messages) = ConfigTestHelper.Run(json);
+
+        Assert.False(ok);
+        Assert.Equal(2, messages.Count);   // both values in one pass — proves non-fail-fast
+        Assert.Contains(messages, m => m.StartsWith("Instances[0].Discord.MinSendIntervalSeconds") && m.Contains("between 1 and 60"));
+        Assert.Contains(messages, m => m.StartsWith("Instances[1].Discord.MinSendIntervalSeconds") && m.Contains("between 1 and 60"));
+    }
+
+    [Fact]
     public void ConfigValidation_ModeUnknownValue_MessageListsValidValues()
     {
         var discord = $$"""{ "WebhookUrl": "{{ConfigTestHelper.WebhookUrl}}", "Mode": "table" }""";

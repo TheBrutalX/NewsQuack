@@ -25,6 +25,28 @@ public class EnvOverrideTests
     }
 
     [Fact]
+    public void EnvOverride_MinSendIntervalSecondsFromEnv_WinsOverFileValue()
+    {
+        // T-048: the new key binds through the standard .NET pipeline exactly like the other Discord keys — env wins over file, and an in-range file value passes validation.
+        var discord = $$"""{ "WebhookUrl": "{{ConfigTestHelper.WebhookUrl}}", "MinSendIntervalSeconds": 5 }""";
+        var json = ConfigTestHelper.Config(ConfigTestHelper.Instance("a", 15, discord: discord));
+
+        var env = new Dictionary<string, string?>
+        {
+            ["NEWSQUACK_INSTANCES__0__DISCORD__MINSENDINTERVALSECONDS"] = "7",
+        };
+
+        var result = ConfigTestHelper.LoadWithEnv(json, env);
+
+        Assert.True(result.IsSuccess, string.Join("\n", result.Errors));
+
+        var interval = result.Config?.Instances?[0]?.Discord?.MinSendIntervalSeconds;
+        Assert.NotNull(interval);
+        // non-null here: Assert.NotNull throws otherwise (xUnit v2's NotNull returns void, so the flow state needs this).
+        Assert.Equal(7, interval!.Value);   // env value wins over the file value (5)
+    }
+
+    [Fact]
     public void EnvOverride_InvalidValueFromEnv_FailsValidationWithFriendlyMessage()
     {
         // env-supplied values go through the same total validator as file values: interval -1 → range error, wrong-scheme webhook → pattern error (masked)

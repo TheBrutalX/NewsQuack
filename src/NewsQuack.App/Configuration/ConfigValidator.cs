@@ -82,6 +82,7 @@ public static class ConfigValidator
         ValidateProperty(discord, nameof(DiscordTargetConfig.Mode), $"{path}.Mode", errors);
         ValidateProperty(discord, nameof(DiscordTargetConfig.Color), $"{path}.Color", errors);
         ValidateProperty(discord, nameof(DiscordTargetConfig.FallbackImageUrl), $"{path}.FallbackImageUrl", errors);
+        ValidateProperty(discord, nameof(DiscordTargetConfig.MinSendIntervalSeconds), $"{path}.MinSendIntervalSeconds", errors);   // T-048: without this line the [Range(1, 60)] attribute is never checked (explicit per-property validation)
     }
 
     /// <summary>Validates one property through its DataAnnotations attributes and prefixes every message with the JSON path.</summary>
