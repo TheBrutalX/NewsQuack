@@ -33,6 +33,11 @@ public class GracefulShutdownTests
     private const string InstanceId = "inst-1";
     private const string FeedUrl = "https://example.com/feed.xml";
 
+    /// <summary>Small tolerance for clock granularity on the floor-based timing assertions — the property under test is "never wait LESS", so the
+    /// epsilon can only shave milliseconds off a pinned floor, never seconds (same pattern as SendWorkerRetryTests, T-044). Issue #51: a CI runner
+    /// measured a 100 ms floor as 99.96 ms and failed the zero-tolerance assertion.</summary>
+    private static readonly TimeSpan ClockEpsilon = TimeSpan.FromMilliseconds(25);
+
     /// <summary>A real RSS with two items (same shape as InstanceSchedulerTests) — each must flow through dedup → image → send into the instance's queue.</summary>
     private const string RssTwoItems = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>Two posts</title>" +
         "<item><title>First post</title><link>https://example.com/first</link><guid isPermaLink=\"true\">https://example.com/first</guid>" +
@@ -290,7 +295,7 @@ public class GracefulShutdownTests
         Assert.Null(confirm.NewFeedState);                                     // ...with T-021 decision 6's null newFeedState (unchanged)
 
         var elapsed = startedAt.Elapsed;
-        Assert.True(elapsed >= TimeSpan.FromMilliseconds(100), $"drain finished in {elapsed} — the 100 ms RetryAfter floor is absolute: never less");
+        Assert.True(elapsed >= TimeSpan.FromMilliseconds(100) - ClockEpsilon, $"drain finished in {elapsed} — the 100 ms RetryAfter floor is absolute: never less (25 ms clock-granularity tolerance, issue #51)");
         Assert.True(elapsed < TimeSpan.FromSeconds(15), $"drain took {elapsed} — far beyond the 100 ms wait + delivery: no extra attempts");
     }
 
