@@ -4,9 +4,9 @@
 
 A self-hosted .NET 10 service that polls RSS/Atom feeds and YouTube channels and delivers every new post to pluggable notification targets (Discord in v1.0), with reliable at-least-once delivery, persistent item-ID dedup and a stage-based post pipeline. Newsquack is an improved reimplementation of [NewsQuack](https://github.com/NewsQuack).
 
-## Status: DEVELOPMENT (M1 in progress)
+## Status: M1 complete — v1.0 release pending
 
-Development is underway on milestone M1 (v1.x). Implemented so far: the solution scaffold, test infrastructure and CI; the v2 config schema with boot-time total validation and friendly error messages; and environment variable overrides for every config value (below). Polling, delivery and the Discord target land in later tasks of this milestone.
+Milestone M1 (v1.x) is fully implemented on the `sp/01` branch and is being released to `master` as **v1.0**. Everything in this milestone has been merged with green CI: the solution scaffold, test infrastructure and CI; the v2 config schema with boot-time total validation and friendly error messages; environment variable overrides for every config value (below); per-instance polling (absolute-slot scheduling, one global HTTP throttle, per-feed error tracking with exponential backoff and auto-removal); per-item parsing with UTC date normalization and platform builders (generic / YouTube / Reddit / GitLab); the stage-based post pipeline (dedup check → image resolution → send) with persistent at-least-once delivery; the Discord target (`embed` / `forum` / `markdown`, one-shot channel-type swap, 429-aware retries, persistent dead-letter storage with classified errors and an optional system webhook); health endpoints (`/healthz`, `/readyz`); and graceful shutdown (schedulers stop → queues drain within a bounded window → WAL checkpoint).
 
 ## Where to look
 
@@ -16,6 +16,33 @@ Development is underway on milestone M1 (v1.x). Implemented so far: the solution
 | [`docs/PROCESS.md`](docs/PROCESS.md) | Everyone — branch model, task lifecycle, GitHub tracking, commit convention (full detail + rationale) |
 | [`docs/TASK-TEMPLATE.md`](docs/TASK-TEMPLATE.md) | Coordinator — template for planning every task in `tasks/` |
 | [`.github/pull_request_template.md`](.github/pull_request_template.md) | Everyone — PR format (task, impact & risk, testing, checklist) |
+
+## Example config file
+
+`newsquack.json` (the app looks for it in this order: CLI argument, `./newsquack.json`, `/config/newsquack.json`; override the location with `NEWSQUACK_CONFIG`):
+
+```json
+{
+  "instances": [
+    {
+      "id": "news",
+      "checkIntervalMinutes": 5,
+      "feeds": [
+        { "url": "https://feeds.bbci.co.uk/news/rss.xml" },
+        { "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UC..." }
+      ],
+      "discord": {
+        "webhookUrl": "https://discord.com/api/webhooks/123456789012345678/AbCdEfGhIjKlMnOpQrStUvWx",
+        "mode": "embed"
+      }
+    }
+  ],
+  "health": { "enabled": true, "port": 8081 },
+  "logging": { "level": "Information" }
+}
+```
+
+Only `instances` is required — every other section and property is optional (defaults apply). Every value can be overridden from an environment variable: see below.
 
 ## Environment variables
 
