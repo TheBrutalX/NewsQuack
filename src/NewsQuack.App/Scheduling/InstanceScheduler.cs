@@ -188,7 +188,9 @@ public sealed class InstanceScheduler : BackgroundService
         if (parseResult.FeedError is { } feedError)
             _logger.LogWarning("Feed at {FeedUrl} fetched OK but could not be parsed: {FeedError}", url, feedError);   // never a silent empty list
 
-        foreach (var post in parseResult.Posts)
+        // T-047: deliver each feed's backlog OLDEST-FIRST — a stable ascending sort by PublishedAt at the scheduler's batch entry. LINQ OrderBy is
+        // guaranteed stable, so items with identical timestamps keep their document order; the parser output itself stays byte-identical (document order).
+        foreach (var post in parseResult.Posts.OrderBy(p => p.PublishedAt))
         {
             var ctx = new PostContext { InstanceId = _instanceId, CurrentPost = post };   // exactly what the pipeline runner consumes per item
 

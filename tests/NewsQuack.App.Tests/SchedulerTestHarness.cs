@@ -24,6 +24,9 @@ internal sealed class FakeFeedStateStore : IStateStore
 
     public void Seed(FeedState state) { lock (_gate) _rows[state.FeedUrl] = state; }
 
+    /// <summary>T-047 test seam: seeds the delivered set directly (simulates a confirm from an earlier cycle without going through MarkDeliveredAsync).</summary>
+    public void SeedDelivered(string instanceId, string itemId) { lock (_gate) _delivered.Add((instanceId, itemId)); }
+
     public FeedState? GetRow(string feedUrl) { lock (_gate) return _rows.TryGetValue(feedUrl, out var row) ? row : null; }
 
     public Task<FeedState?> GetFeedStateAsync(string feedUrl, CancellationToken ct = default) => Task.FromResult(GetRow(feedUrl));
