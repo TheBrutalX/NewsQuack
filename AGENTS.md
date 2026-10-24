@@ -17,7 +17,7 @@ How a post flows through the system:
 
    | Order | Stage | Notes |
    |---|---|---|
-   | 10 | dedup check | item-ID already delivered → `ctx.Skip = true`, no further work on this item |
+   | 10 | dedup check | item-ID already delivered or pending (in-flight) → `ctx.Skip = true`, no further work on this item |
    | 20 | filters (negative / regex / time range) | reserved slot, v2.0 — do not add a stage here in v1.0 tasks unless your task says so |
    | 30 | image resolution | XML first, page scraping fallback; only new posts reach it (dedup skipped the rest) |
    | 40 | LLM tagging (JEV / OpenAI-compatible) | reserved slot, optional per instance, v2.x — `FailurePolicy = ContinueDegraded` when implemented |
@@ -25,7 +25,7 @@ How a post flows through the system:
 
    A stage may set `ctx.Skip = true` to stop processing of that item; every stage declares a `FailurePolicy` (`IsolateItem` by default, `ContinueDegraded` only for optional enrichment). The runner orders stages by `Order`, checks `Skip` after each stage, and applies the per-stage policy on failure.
 4. **Delivery** — a per-instance bounded `Channel<T>` queue + single-reader **target-agnostic** worker dispatches to the instance's `INotificationTarget`. The worker owns the retry policy: exponential backoff with jitter, honoring `Retry-After` (header or body) on HTTP 429, max attempts → persistent dead-letter. Adding a new target never touches the worker.
-5. **State** — delivery is confirmed **only after** the target answers HTTP 204 (`Delivered`): an atomic EF Core transaction marks the item delivered and advances feed state in one commit. Semantics are **at-least-once**: a crash between send and confirm may produce one duplicate post, never a lost one.
+5. **State** — delivery is confirmed **only after** the target answers HTTP 204 (`Delivered`): an atomic EF Core transaction marks the item delivered (clearing its pending marker) and advances feed state in one commit. Pending markers are wiped wholesale at startup (they always belong to a dead process), preserving at-least-once across crashes. Semantics are **at-least-once**: a crash between send and confirm may produce one duplicate post, never a lost one.
 
 Persistence is **EF Core + SQLite provider (WAL mode)**:
 - one `AppDbContext` per operation, created via `IDbContextFactory<AppDbContext>` — **never** a singleton or shared context;
