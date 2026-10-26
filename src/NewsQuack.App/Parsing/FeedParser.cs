@@ -100,6 +100,11 @@ public sealed class FeedParser : IFeedParser
         var isAtom = root.Name.LocalName == "feed";
         var container = isAtom ? root : (Child(root, "channel") ?? root);   // feed-level author fallback target
 
+        // T-053: feed/channel display name — RSS/RDF <channel><title>, Atom <feed><title>. XElement.Value concatenates any nested
+        // text content (Atom <title> may carry a type attribute or inline markup); acceptable for v1.0, no HTML decoding needed.
+        var sourceName = Child(container, "title")?.Value;              // null when absent
+        if (!string.IsNullOrWhiteSpace(sourceName)) sourceName = sourceName.Trim(); else sourceName = null;
+
         // Namespace-aware by local name: <item> in RSS/RDF, <entry> in Atom. A document is one or the other, so the union
         // never double-collects. LocalName ignores the default namespace (Atom feeds declare one).
         var nodes = doc.Descendants()
@@ -128,7 +133,7 @@ public sealed class FeedParser : IFeedParser
             try
             {
                 if (builder.Build(raw, sourceUrl) is { } post)   // null only if a builder ever returns it; drops throw instead
-                    posts.Add(post);
+                    posts.Add(post with { SourceName = sourceName });   // T-053: feed-level name projected once per item — no IPostBuilder signature change
             }
             catch (ItemDropException drop)   // known droppable case: missing title/date — no exception object to attach
             {

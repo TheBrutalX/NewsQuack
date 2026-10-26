@@ -254,6 +254,93 @@ public class FeedParserTests
         Assert.Equal("https://example.com/posts/42", result.Posts[0].Link);   // relative resolved against the feed URL
     }
 
+    // ── T-053: feed display name (SourceName) ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Parse_RssFeedWithChannelTitle_EveryPostCarriesSourceNameEqualToTrimmedTitle()
+    {
+        var (parser, _) = CreateParser();
+
+        const string feed = """
+            <rss version="2.0"><channel><title>  Padded Title  </title>
+              <item><title>First</title><link>https://example.com/1</link><guid isPermaLink="false">g1</guid>
+                <pubDate>Tue, 21 Oct 2025 16:42:10 +0000</pubDate></item>
+              <item><title>Second</title><link>https://example.com/2</link><guid isPermaLink="false">g2</guid>
+                <pubDate>Tue, 21 Oct 2025 17:42:10 +0000</pubDate></item>
+            </channel></rss>
+            """;
+
+        var result = await parser.ParseAsync(feed, Source);
+
+        Assert.Equal(2, result.Posts.Count);
+        Assert.All(result.Posts, p => Assert.Equal("Padded Title", p.SourceName));   // trimmed AND propagated to every item
+    }
+
+    [Fact]
+    public async Task Parse_RssFeedWithoutChannelTitle_SourceNameIsNull()
+    {
+        var (parser, _) = CreateParser();
+
+        const string feed = """
+            <rss version="2.0"><channel>
+              <item><title>First</title><link>https://example.com/1</link><guid isPermaLink="false">g1</guid>
+                <pubDate>Tue, 21 Oct 2025 16:42:10 +0000</pubDate></item>
+              <item><title>Second</title><link>https://example.com/2</link><guid isPermaLink="false">g2</guid>
+                <pubDate>Tue, 21 Oct 2025 17:42:10 +0000</pubDate></item>
+            </channel></rss>
+            """;
+
+        var result = await parser.ParseAsync(feed, Source);
+
+        Assert.Equal(2, result.Posts.Count);
+        Assert.All(result.Posts, p => Assert.Null(p.SourceName));   // absent title ⇒ null, never empty/blank
+    }
+
+    [Fact]
+    public async Task Parse_RssFeedWhitespaceOnlyChannelTitle_SourceNameIsNull()
+    {
+        var (parser, _) = CreateParser();
+
+        const string feed = """
+            <rss version="2.0"><channel><title>   </title>
+              <item><title>First</title><link>https://example.com/1</link><guid isPermaLink="false">g1</guid>
+                <pubDate>Tue, 21 Oct 2025 16:42:10 +0000</pubDate></item>
+              <item><title>Second</title><link>https://example.com/2</link><guid isPermaLink="false">g2</guid>
+                <pubDate>Tue, 21 Oct 2025 17:42:10 +0000</pubDate></item>
+            </channel></rss>
+            """;
+
+        var result = await parser.ParseAsync(feed, Source);
+
+        Assert.Equal(2, result.Posts.Count);
+        Assert.All(result.Posts, p => Assert.Null(p.SourceName));   // whitespace-only title ⇒ null (same as absent)
+    }
+
+    [Fact]
+    public async Task ParseTolerantPass_FeedWithChannelTitle_SourceNameSetInBothPasses()
+    {
+        var xml = FixtureLoader.Load("rss2.xml");
+        var (parser, _) = CreateParser();
+
+        // Both passes share the item walk — the feed-level extraction must be visible in each.
+        var viaPrimary = await parser.ParseAsync(xml, Source);
+        var viaTolerant = parser.ParseTolerantPass(xml, Source);
+
+        Assert.All(viaPrimary.Posts, p => Assert.Equal("Daily Tech Briefing", p.SourceName));
+        Assert.All(viaTolerant.Posts, p => Assert.Equal("Daily Tech Briefing", p.SourceName));
+    }
+
+    [Fact]
+    public async Task Parse_AtomFeedWithRootTitle_SourceNameSetFromFeedElementTitle()
+    {
+        var (parser, _) = CreateParser();
+
+        var result = await parser.ParseAsync(FixtureLoader.Load("atom.xml"), Source);
+
+        Assert.Equal(4, result.Posts.Count);
+        Assert.All(result.Posts, p => Assert.Equal("Open Source Weekly", p.SourceName));   // Atom root <feed><title> path
+    }
+
     // ── Two-pass equivalence ────────────────────────────────────────────────────────────────────────────────
 
     [Fact]

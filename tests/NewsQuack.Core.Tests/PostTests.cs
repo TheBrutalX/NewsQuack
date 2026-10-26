@@ -26,6 +26,14 @@ public class PostTests
         Assert.Null(post.ImageUrl);
     }
 
+    [Fact]
+    public void Post_SourceName_NotSet_DefaultsToNull()
+    {
+        var post = CreatePostWithoutOptionalFields();
+
+        Assert.Null(post.SourceName);   // T-053: init-optional nullable — omitting it must be legal (source-compatible with all builders)
+    }
+
     private static Post CreatePostWithoutOptionalFields() => new()
     {
         Id = Guid.NewGuid().ToString(),

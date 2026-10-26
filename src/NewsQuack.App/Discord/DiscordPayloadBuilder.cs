@@ -62,9 +62,9 @@ public static class DiscordPayloadBuilder
 
     private static string BuildMarkdownPayload(Post post, DiscordTargetConfig config)
     {
-        // Amended template (T-020 frozen, T-052 amendment): **<title>**\n<link>\n\n<plain-text description>\n\n<effective image url>\n\nFeed: <sourceUrl> —
-        // each previously-optional part is still omitted entirely when absent; the feed section is now always present (Post.SourceUrl is
-        // required). PlainText collapses every whitespace run to a single space, so the assembled string can never contain 3+ consecutive
+        // Amended template (T-020 frozen, T-052 amendment, T-053 refinement): **<title>**\n<link>\n\n<plain-text description>\n\n<effective image url>\n\nFeed: <sourceName or sourceUrl> —
+        // each previously-optional part is still omitted entirely when absent; the feed section is always present (the label is the feed's display
+        // name when non-blank, else the required Post.SourceUrl). PlainText collapses every whitespace run to a single space, so the assembled string can never contain 3+ consecutive
         // newlines (the template's own \n\n separators are the only line breaks). Title and description are truncated to their embed limits
         // before assembly so no part ever exceeds its limit in any mode.
         var markdown = new StringBuilder();
@@ -82,8 +82,9 @@ public static class DiscordPayloadBuilder
         if (image is not null)
             markdown.Append("\n\n").Append(image);
 
-        // T-052: final feed-source section — an explicit decision amending the frozen T-020 template (recorded in tasks/t-052).
-        markdown.Append("\n\n").Append(TruncateWithEllipsis("Feed: " + post.SourceUrl, FooterTextLimit));
+        // T-052: final feed-source section — an explicit decision amending the frozen T-020 template (recorded in tasks/t-052);
+        // T-053: label is the feed's display name when known, else the URL.
+        markdown.Append("\n\n").Append(TruncateWithEllipsis("Feed: " + FeedLabel(post), FooterTextLimit));
 
         var payload = new JsonObject();
         payload["content"] = markdown.ToString();
@@ -120,9 +121,9 @@ public static class DiscordPayloadBuilder
         // ISO 8601 UTC with Z suffix — invariant culture, no CurrentCulture anywhere (T-020 date rule).
         embed["timestamp"] = post.PublishedAt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
 
-        // T-052: feed source — always present (Post.SourceUrl is required) and truncated to Discord's footer limit. Discord renders the
-        // footer on the same bottom line to the LEFT of the timestamp, i.e. exactly "before the date".
-        embed["footer"] = new JsonObject { ["text"] = TruncateWithEllipsis("Feed: " + post.SourceUrl, FooterTextLimit) };
+        // T-052/T-053: feed source — always present (label is the feed's display name when non-blank, else the required Post.SourceUrl) and
+        // truncated to Discord's footer limit. Discord renders the footer on the same bottom line to the LEFT of the timestamp, i.e. exactly "before the date".
+        embed["footer"] = new JsonObject { ["text"] = TruncateWithEllipsis("Feed: " + FeedLabel(post), FooterTextLimit) };
 
         var image = EffectiveImage(post, config);
         if (image is not null)                           // omitted when no effective image at all
@@ -143,6 +144,11 @@ public static class DiscordPayloadBuilder
             ? uri.Host
             : post.SourceUrl;
     }
+
+    /// <summary>T-053: feed attribution label — the feed's display name when non-blank, else the required SourceUrl (URL fallback);
+    /// never null. Used by both the embed/forum footer and the markdown final section so they stay coherent.</summary>
+    private static string FeedLabel(Post post) =>
+        string.IsNullOrWhiteSpace(post.SourceName) ? post.SourceUrl : post.SourceName;
 
     /// <summary>The fallback image rule: the post's own image when non-empty, else the configured fallback (guarantees an image
     /// whenever resolution earlier in the pipeline left ImageUrl empty), else none.</summary>

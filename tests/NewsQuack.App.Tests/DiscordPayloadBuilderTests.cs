@@ -225,6 +225,57 @@ public class DiscordPayloadBuilderTests
         Assert.Equal("Feed: https://example.com/feed.xml", embed.GetProperty("footer").GetProperty("text").GetString());
     }
 
+    // ── T-053: feed display name (SourceName) in the label ─────────────────────────────────────────────
+
+    [Fact]
+    public void BuildEmbedPayload_PostWithSourceName_FooterShowsFeedNameNotUrl()
+    {
+        var post = MakePost() with { SourceName = "Daily Tech Briefing" };
+
+        var embedFooter = Parse(DiscordPayloadBuilder.BuildPayload(post, MakeConfig("embed"), DiscordMode.Embed))
+            .GetProperty("embeds")[0].GetProperty("footer");
+        Assert.Equal("Feed: Daily Tech Briefing", embedFooter.GetProperty("text").GetString());   // the name — NOT the URL
+
+        var forumFooter = Parse(DiscordPayloadBuilder.BuildPayload(post, MakeConfig("forum"), DiscordMode.Forum))
+            .GetProperty("embeds")[0].GetProperty("footer");
+        Assert.Equal(embedFooter.GetRawText(), forumFooter.GetRawText());   // byte-identical — shared BuildEmbedObject
+    }
+
+    [Fact]
+    public void BuildMarkdownPayload_PostWithSourceName_ContentEndsWithFeedNameSection()
+    {
+        var post = MakePost() with { SourceName = "Daily Tech Briefing" };
+
+        var content = Parse(DiscordPayloadBuilder.BuildPayload(post, MakeConfig(), DiscordMode.Markdown))
+            .GetProperty("content").GetString()!;
+
+        Assert.EndsWith("\n\nFeed: Daily Tech Briefing", content);   // name replaces the URL in the final section
+    }
+
+    [Fact]
+    public void BuildEmbedPayload_WhitespaceOnlySourceName_FallsBackToSourceUrl()
+    {
+        var post = MakePost() with { SourceName = "   " };
+
+        var footer = Parse(DiscordPayloadBuilder.BuildPayload(post, MakeConfig(), DiscordMode.Embed))
+            .GetProperty("embeds")[0].GetProperty("footer").GetProperty("text").GetString();
+
+        Assert.Equal("Feed: https://example.com/feed.xml", footer);   // blank name behaves exactly like absent
+    }
+
+    [Fact]
+    public void BuildEmbedPayload_SourceNameOver2048_FooterTruncatedAtExactly2048()
+    {
+        var post = MakePost() with { SourceName = new string('n', 2100) };   // "Feed: " + 2100 chars > the 2048 footer limit
+
+        var footer = Parse(DiscordPayloadBuilder.BuildPayload(post, MakeConfig(), DiscordMode.Embed))
+            .GetProperty("embeds")[0].GetProperty("footer").GetProperty("text").GetString()!;
+
+        Assert.Equal(2048, footer.Length);                       // exactly the limit — never over (Discord would reject the whole embed)
+        Assert.EndsWith("…", footer);                            // single trailing ellipsis when cutting
+        Assert.Equal("Feed: " + new string('n', 2041), footer[..2047]);   // …and nothing else was altered
+    }
+
     [Fact]
     public void Payload_Embed_AuthorNull_OmitsAuthorField()
     {

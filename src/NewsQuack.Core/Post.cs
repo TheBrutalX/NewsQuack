@@ -14,4 +14,5 @@ public sealed record Post
     public string? ImageUrl { get; init; }                      // nullable until resolved by the image stage
     public IReadOnlyList<string> Tags { get; init; } = [];      // empty, never null
     public required string SourceUrl { get; init; }             // URL of the feed this post came from
+    public string? SourceName { get; init; }                    // T-053: feed/channel display name when known (RSS/RDF <channel><title>, Atom <feed><title>); null when absent or blank — consumers fall back to SourceUrl
 }
