@@ -1,4 +1,4 @@
-using NewsQuack.App.Configuration;   // NewsquackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the registration is built from config
+using NewsQuack.App.Configuration;   // NewsQuackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the registration is built from config
 using NewsQuack.App.Fetching;        // IFeedFetcher — resolved by each scheduler at construction (T-010)
 using NewsQuack.App.Logging;         // LogEnricher — registered Scoped, resolved per cycle/feed scope by the scheduler
 using NewsQuack.App.Pipeline;        // PostPipelineRunner — the ordered stage chain (T-024)
@@ -23,7 +23,7 @@ public class InstanceSchedulingRegistrationTests
     [Fact]
     public void AddInstanceScheduling_TwoInstances_RegistersOneSchedulerPerInstance()
     {
-        var config = new NewsquackConfig { Instances = [
+        var config = new NewsQuackConfig { Instances = [
             Instance("inst-a"),   // two configured instances — the multi-instance mode is the point of the product (AGENTS.md)
             Instance("inst-b"),
         ]};

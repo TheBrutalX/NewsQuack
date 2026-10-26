@@ -1,4 +1,4 @@
-using NewsQuack.App.Configuration;   // NewsquackConfig / InstanceConfig — one sink per configured instance
+using NewsQuack.App.Configuration;   // NewsQuackConfig / InstanceConfig — one sink per configured instance
 using NewsQuack.Core;                // IStateStore — the frozen contract the sink persists through (T-015)
 using Microsoft.Extensions.DependencyInjection;   // IServiceCollection + ServiceDescriptor (keyed-singleton pattern, T-021)
 using Microsoft.Extensions.Logging;   // ILogger<T>
@@ -12,7 +12,7 @@ namespace NewsQuack.App.Sending;
 /// </summary>
 public static class DeadLetterRegistration
 {
-    public static IServiceCollection AddDeadLettering(this IServiceCollection services, NewsquackConfig config)
+    public static IServiceCollection AddDeadLettering(this IServiceCollection services, NewsQuackConfig config)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(config);

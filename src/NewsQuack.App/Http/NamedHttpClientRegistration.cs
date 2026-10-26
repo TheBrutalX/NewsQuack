@@ -30,7 +30,7 @@ public static class NamedHttpClientRegistration
 
     /// <summary>Registers the three named clients. A null section falls back to the schema defaults (30/15/15 s, no private-network blocking) —
     /// same pattern as Program's health section; boot validation already guarantees any present values are sane.</summary>
-    public static IServiceCollection AddNewsquackHttpClients(this IServiceCollection services, HttpSectionConfig? http)
+    public static IServiceCollection AddNewsQuackHttpClients(this IServiceCollection services, HttpSectionConfig? http)
     {
         ArgumentNullException.ThrowIfNull(services);
 

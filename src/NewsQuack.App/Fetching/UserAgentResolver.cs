@@ -16,8 +16,8 @@ public sealed class UserAgentResolver
     /// <summary>The v1.0 cascade, in retry order (coordinator decision — both entries validate: non-empty, ≤ 255 chars, no control characters).</summary>
     public static readonly IReadOnlyList<string> DefaultCandidates = new[]
     {
-        "Newsquack/1.0 (+https://github.com/TheBrutalX/Newsquack; +rss-reader)",
-        "Mozilla/5.0 (compatible; Newsquack/1.0; +https://github.com/TheBrutalX/Newsquack)",
+        "NewsQuack/1.0 (+https://github.com/TheBrutalX/NewsQuack; +rss-reader)",
+        "Mozilla/5.0 (compatible; NewsQuack/1.0; +https://github.com/TheBrutalX/NewsQuack)",
     };
 
     /// <summary>The surviving candidates, in retry order — empty when every candidate was invalid at construction.</summary>

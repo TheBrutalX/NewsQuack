@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;   // ConcurrentDictionary — pacers for URLs discovered at runtime (e.g. the dead-letter webhook) are created on demand
-using NewsQuack.App.Configuration;     // NewsquackConfig / DiscordTargetConfig — the registry is built from the validated config at composition time
+using NewsQuack.App.Configuration;     // NewsQuackConfig / DiscordTargetConfig — the registry is built from the validated config at composition time
 
 namespace NewsQuack.App.Discord;
 
@@ -20,7 +20,7 @@ public sealed class WebhookPacerRegistry
 
     private readonly ConcurrentDictionary<string, WebhookPacer> _byUrl;   // normalized Ordinal keys — the canonical webhook URL IS the key (constraint 3)
 
-    public WebhookPacerRegistry(NewsquackConfig config)
+    public WebhookPacerRegistry(NewsQuackConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
 

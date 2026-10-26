@@ -6,7 +6,7 @@ using WireMock.Server;
 
 namespace NewsQuack.App.Tests;
 
-/// <summary>T-010 test host: one WireMock server on a dynamic port + the REAL production HTTP wiring (AddNewsquackHttpClients → named "feed"
+/// <summary>T-010 test host: one WireMock server on a dynamic port + the REAL production HTTP wiring (AddNewsQuackHttpClients → named "feed"
 /// client with the shared SsrfSafeHttpHandler) + a FeedFetcher built around it. Test-visible knobs exactly where the task allows injection:
 /// feed timeout (seconds), UA cache cap, and the candidate list. The throttle is NOT a knob — the plans assert against the production constant.</summary>
 internal sealed class FeedFetcherTestHost : IDisposable
@@ -45,7 +45,7 @@ internal sealed class FeedFetcherTestHost : IDisposable
         var server = WireMockServer.Start();   // dynamic free port — no fixed binding (CI-safe)
 
         var services = new ServiceCollection();
-        services.AddNewsquackHttpClients(new HttpSectionConfig { FeedTimeoutSeconds = feedTimeoutSeconds });
+        services.AddNewsQuackHttpClients(new HttpSectionConfig { FeedTimeoutSeconds = feedTimeoutSeconds });
         var provider = services.BuildServiceProvider();
 
         var fetcherLogs = new LogCapture();

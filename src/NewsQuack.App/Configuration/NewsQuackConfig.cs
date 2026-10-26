@@ -4,7 +4,7 @@ namespace NewsQuack.App.Configuration;
 /// Root of the v2 config schema (frozen by T-002 — later tasks bind to these exact key names).
 /// Property names are the JSON keys. Unknown JSON properties are tolerated by the serializer (forward compatibility).
 /// </summary>
-public sealed class NewsquackConfig
+public sealed class NewsQuackConfig
 {
     /// <summary>Required, at least one instance. Presence and count are checked by <see cref="ConfigValidator"/> (annotations cannot express "at least one").</summary>
     public List<InstanceConfig>? Instances { get; init; } = [];

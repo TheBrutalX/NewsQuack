@@ -65,7 +65,7 @@ public class RobotsParserTests
     }
 
     [Fact]
-    public void RobotsParser_NewsquackAgent_CaseInsensitive_MatchesOwnBlockOnly()
+    public void RobotsParser_NewsQuackAgent_CaseInsensitive_MatchesOwnBlockOnly()
     {
         var robots = Lines(
             "User-agent: Googlebot",

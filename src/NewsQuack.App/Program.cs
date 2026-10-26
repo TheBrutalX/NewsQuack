@@ -50,7 +50,7 @@ if (health.Enabled)
 
     // T-005: three named clients (feed/discord/image) with per-client timeouts from the validated config and one shared anti-SSRF redirect
     // handler in every pipeline — "discord" is what T-020's target resolves. One wiring method for both host paths.
-    webBuilder.Services.AddNewsquackHttpClients(config.Http);
+    webBuilder.Services.AddNewsQuackHttpClients(config.Http);
 
     webBuilder.Services.AddWebhookPacing(config);   // T-048: shared per-webhook-URL pacer registry from the validated config — the "discord" client's pacing handler resolves it (same wiring as the generic host path)
 
@@ -67,7 +67,7 @@ if (health.Enabled)
 
     webBuilder.Services.AddDedupEngine();         // T-014: dedup engine + DedupCheckStage (Order 10) — same wiring as the generic host path
 
-    webBuilder.Services.AddSingleton<NewsquackConfig>(config);   // T-024: the validated, immutable config — safe singleton (same wiring as the generic host path)
+    webBuilder.Services.AddSingleton<NewsQuackConfig>(config);   // T-024: the validated, immutable config — safe singleton (same wiring as the generic host path)
 
     webBuilder.Services.AddPostPipeline();         // T-024: runner + ImageResolutionStage + SendStage + send-queue registry (same wiring as the generic host path)
 
@@ -115,7 +115,7 @@ else
     var builder = Host.CreateApplicationBuilder(args);
 
     // T-005: exactly the wiring of the health path above — both hosts get the three named clients with config timeouts and the shared handler.
-    builder.Services.AddNewsquackHttpClients(config.Http);
+    builder.Services.AddNewsQuackHttpClients(config.Http);
 
     builder.Services.AddWebhookPacing(config);   // T-048: exactly the pacer-registry wiring of the health path above
 
@@ -135,7 +135,7 @@ else
 
     builder.Services.AddDedupEngine();         // T-014: dedup engine + DedupCheckStage (Order 10) — runs regardless of the health listener
 
-    builder.Services.AddSingleton<NewsquackConfig>(config);   // T-024: the validated, immutable config — safe singleton (same wiring as the health path)
+    builder.Services.AddSingleton<NewsQuackConfig>(config);   // T-024: the validated, immutable config — safe singleton (same wiring as the health path)
 
     builder.Services.AddPostPipeline();         // T-024: runner + ImageResolutionStage + SendStage + send-queue registry (same wiring as the health path)
 
@@ -221,7 +221,7 @@ static async Task<bool> MigrateStoreAsync(IServiceProvider services)
 }
 
 // T-030/T-004: the JSON-on-stdout logging setup shared by both host paths, so behavior is identical on each.
-static void ApplyJsonLogging(IServiceCollection services, ILoggingBuilder logging, NewsquackConfig config)
+static void ApplyJsonLogging(IServiceCollection services, ILoggingBuilder logging, NewsQuackConfig config)
 {
     // Replace the default console/debug providers with the JSON line provider and honor Logging.Level from the validated config.
     // SetMinimumLevel is the host's standard level-configuration mechanism — no custom filtering code in the provider itself.

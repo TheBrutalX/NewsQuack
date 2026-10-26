@@ -1,5 +1,5 @@
 using System.Globalization;   // CultureInfo.InvariantCulture — the drain-timeout parse never uses CurrentCulture (AGENTS.md)
-using NewsQuack.App.Configuration;   // NewsquackConfig / InstanceConfig — one worker (and its target) per configured instance
+using NewsQuack.App.Configuration;   // NewsQuackConfig / InstanceConfig — one worker (and its target) per configured instance
 using NewsQuack.App.Discord;         // DiscordNotificationTarget — the v1.0 target (T-020), wired into DI here for the first time
 using NewsQuack.App.Pipeline;        // SendQueueRegistry — this instance's bounded queue (T-024)
 using NewsQuack.Core;                // INotificationTarget / IDedupEngine — the frozen contracts
@@ -21,7 +21,7 @@ public static class SendWorkerRegistration
     /// <summary>T-031 decision 4: the operational env var holding the shutdown drain window in seconds (not a schema key — same pattern as NEWSQUACK_DATABASE / NEWSQUACK_DEADLETTER_WEBHOOK).</summary>
     public const string DrainTimeoutEnvironmentVariable = "NEWSQUACK_SHUTDOWN_DRAIN_TIMEOUT_SECONDS";
 
-    public static IServiceCollection AddSendWorkers(this IServiceCollection services, NewsquackConfig config)
+    public static IServiceCollection AddSendWorkers(this IServiceCollection services, NewsQuackConfig config)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(config);

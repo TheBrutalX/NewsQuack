@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 namespace NewsQuack.App.Fetching;
 
 /// <summary>
-/// T-010: DI wiring for the feed-fetching layer, shared by both host paths in Program.cs (same pattern as AddNewsquackHttpClients). One
+/// T-010: DI wiring for the feed-fetching layer, shared by both host paths in Program.cs (same pattern as AddNewsQuackHttpClients). One
 /// <see cref="IFeedFetcher"/> serves all instances/feeds — multi-instance mode shares the global throttle by design.
 /// </summary>
 public static class FeedFetcherRegistration

@@ -12,7 +12,7 @@ using Xunit;
 namespace NewsQuack.App.Tests;
 
 /// <summary>T-005: redirect and decompression behavior of the shared SsrfSafeHttpHandler, exercised through the REAL client wiring
-/// (AddNewsquackHttpClients) against a self-hosted WireMock on dynamic ports (CI-safe). The default server binds to localhost, which
+/// (AddNewsQuackHttpClients) against a self-hosted WireMock on dynamic ports (CI-safe). The default server binds to localhost, which
 /// accepts both 127.0.0.1 and ::1 connections — proven before writing these tests — so loopback-IP redirect targets are deterministic.</summary>
 public class SsrfSafeHttpHandlerTests
 {
@@ -148,7 +148,7 @@ public class SsrfSafeHttpHandlerTests
         Assert.Equal(payload, body);   // native Accept-Encoding: gzip — no manual header handling anywhere in the service
     }
 
-    /// <summary>One WireMock server + a "feed" client built through the exact production wiring (AddNewsquackHttpClients) on a dynamic port.</summary>
+    /// <summary>One WireMock server + a "feed" client built through the exact production wiring (AddNewsQuackHttpClients) on a dynamic port.</summary>
     private sealed class Host : IDisposable
     {
         public WireMockServer Server { get; }
@@ -169,7 +169,7 @@ public class SsrfSafeHttpHandlerTests
             var server = WireMockServer.Start();   // dynamic free port — no fixed binding
 
             var services = new ServiceCollection();
-            services.AddNewsquackHttpClients(new HttpSectionConfig { BlockPrivateNetworkRedirects = blockPrivateNetworkRedirects });
+            services.AddNewsQuackHttpClients(new HttpSectionConfig { BlockPrivateNetworkRedirects = blockPrivateNetworkRedirects });
             var provider = services.BuildServiceProvider();
 
             return new Host(server, provider.GetRequiredService<IHttpClientFactory>().CreateClient("feed"), provider);

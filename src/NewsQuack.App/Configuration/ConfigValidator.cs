@@ -12,7 +12,7 @@ namespace NewsQuack.App.Configuration;
 public static class ConfigValidator
 {
     /// <summary>Validates the whole config graph and returns every error (empty list = valid).</summary>
-    public static IReadOnlyList<string> Validate(NewsquackConfig config)
+    public static IReadOnlyList<string> Validate(NewsQuackConfig config)
     {
         var errors = new List<string>();
 

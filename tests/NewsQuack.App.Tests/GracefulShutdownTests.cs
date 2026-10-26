@@ -1,7 +1,7 @@
 using System.Diagnostics;   // Stopwatch — drain-window timing assertions (not a date — no UTC rule involved)
-using NewsQuack.App.Configuration;   // NewsquackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the registration is built from config
+using NewsQuack.App.Configuration;   // NewsQuackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the registration is built from config
 using NewsQuack.App.Fetching;        // AddFeedFetching — the scheduler resolves IFeedFetcher at construction (T-010)
-using NewsQuack.App.Http;            // AddNewsquackHttpClients + NamedHttpClientRegistration — the named clients every piece below resolves (T-005)
+using NewsQuack.App.Http;            // AddNewsQuackHttpClients + NamedHttpClientRegistration — the named clients every piece below resolves (T-005)
 using NewsQuack.App.Logging;         // LogEnricher — registered Scoped, resolved per post scope by the worker (decision 5)
 using NewsQuack.App.Parsing;         // AddFeedParsing — the scheduler resolves IFeedParser at construction (T-012)
 using NewsQuack.App.Pipeline;        // BoundedSendQueue / DedupEngine / SendQueueRegistry — the real pieces the worker consumes
@@ -146,15 +146,15 @@ public class GracefulShutdownTests
     [Fact]
     public void Shutdown_RegistrationOrder_WorkersRegisteredBeforeSchedulers_StopOrderPinned()
     {
-        var config = new NewsquackConfig { Instances = [Instance("inst-a"), Instance("inst-b")] };   // two configured instances — multi-instance mode is the point (AGENTS.md)
+        var config = new NewsQuackConfig { Instances = [Instance("inst-a"), Instance("inst-b")] };   // two configured instances — multi-instance mode is the point (AGENTS.md)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddNewsquackHttpClients(new HttpSectionConfig());   // T-005: the named clients every piece below resolves — exactly Program.cs's wiring
+        services.AddNewsQuackHttpClients(new HttpSectionConfig());   // T-005: the named clients every piece below resolves — exactly Program.cs's wiring
         services.AddFeedFetching();                                  // T-010 — the scheduler resolves IFeedFetcher at construction
         services.AddFeedParsing();                                   // T-012 — the scheduler resolves IFeedParser at construction
         services.AddScoped<LogEnricher>();                           // T-004 — same as Program.cs (resolved per scope at runtime, not construction)
-        services.AddSingleton<NewsquackConfig>(config);              // T-024: the validated config singleton — same as Program.cs
+        services.AddSingleton<NewsQuackConfig>(config);              // T-024: the validated config singleton — same as Program.cs
         services.AddSingleton<IStateStore>(new RecordingStateStore());   // dedup engine + tracker + sink persist through the frozen contract — the recording fake is enough for wiring
         services.AddDedupEngine();                                   // T-014 — same as Program.cs
         services.AddPostPipeline();                                  // T-024: runner + stages + send-queue registry — same as Program.cs

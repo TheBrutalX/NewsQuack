@@ -1,4 +1,4 @@
-using NewsQuack.App.Configuration;   // NewsquackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the registry is built from config
+using NewsQuack.App.Configuration;   // NewsQuackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the registry is built from config
 using NewsQuack.App.Pipeline;        // SendStage / BoundedSendQueue / SendQueueRegistry
 using NewsQuack.Core;                // Post / PostContext — the frozen contracts
 using Xunit;
@@ -31,7 +31,7 @@ public class SendStageAndQueueTests
         Discord = new DiscordTargetConfig { WebhookUrl = DiscordWebhook },
     };
 
-    private static NewsquackConfig Config(params string[] instanceIds) => new() { Instances = instanceIds.Select(Instance).ToList() };
+    private static NewsQuackConfig Config(params string[] instanceIds) => new() { Instances = instanceIds.Select(Instance).ToList() };
 
     [Fact]
     public async Task Send_EnqueuesCurrentPostToThisInstancesQueueOnly()

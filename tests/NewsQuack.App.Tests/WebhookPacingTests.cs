@@ -1,7 +1,7 @@
 using System.Diagnostics;              // Stopwatch — bounded promptness assertions on cancellation (issue #56 / constraint 6)
-using NewsQuack.App.Configuration;      // DiscordTargetConfig / InstanceConfig / FeedConfig / NewsquackConfig / HttpSectionConfig — the in-test config the registry is built from
+using NewsQuack.App.Configuration;      // DiscordTargetConfig / InstanceConfig / FeedConfig / NewsQuackConfig / HttpSectionConfig — the in-test config the registry is built from
 using NewsQuack.App.Discord;            // DiscordNotificationTarget + WebhookPacer/WebhookPacerRegistry — the REAL target and pacing pieces under test
-using NewsQuack.App.Http;               // AddNewsquackHttpClients — the REAL production HTTP wiring (the pacing handler sits in the "discord" pipeline)
+using NewsQuack.App.Http;               // AddNewsQuackHttpClients — the REAL production HTTP wiring (the pacing handler sits in the "discord" pipeline)
 using NewsQuack.App.Logging;            // LogEnricher — registered Scoped, resolved per post scope by the worker (T-021 decision 5)
 using NewsQuack.App.Pipeline;           // BoundedSendQueue / DedupEngine — the real pieces the worker consumes
 using NewsQuack.App.Sending;            // SendWorker / DeadLetterSink / DeadLetterNotifier — the REAL per-instance delivery path
@@ -17,7 +17,7 @@ namespace NewsQuack.App.Tests;
 
 /// <summary>
 /// T-048: end-to-end pacing regression tests through the REAL <see cref="DiscordNotificationTarget"/> pointed at a self-hosted WireMock serving SEQUENCED answers, drained by the REAL per-instance
-/// <see cref="SendWorker"/>, with the REAL production HTTP wiring in front (AddNewsquackHttpClients + AddWebhookPacing — the pacing handler is part of the "discord" client's pipeline exactly as in
+/// <see cref="SendWorker"/>, with the REAL production HTTP wiring in front (AddNewsQuackHttpClients + AddWebhookPacing — the pacing handler is part of the "discord" client's pipeline exactly as in
 /// Program.cs). Pins issue #56 as a whole-system property: no two requests to the same webhook URL start closer than the configured minimum interval (default 3 s ⇒ at most 21 requests per closed 60 s window, exactly 20/min sustained); pacing counts REQUESTS,
 /// not posts (the fallback swap's second POST is paced too); pacing state is shared by URL across instances (strictest interval wins); pacing COMPOSES with retry/backoff/Retry-After (never replaces it);
 /// and cancellation during a pacing wait surfaces promptly without blocking the shutdown drain. Nothing in the path is scripted: real target + real worker + real queue + real dedup engine; only the HTTP
@@ -219,7 +219,7 @@ public class WebhookPacingTests
     [Fact]
     public void Registry_TwoInstancesSameUrlDifferentIntervals_StrictestIntervalWins()
     {
-        var config = new NewsquackConfig { Instances = [ Instance("a", 5), Instance("b", 2) ] };   // same webhook URL, intervals 5 s and 2 s
+        var config = new NewsQuackConfig { Instances = [ Instance("a", 5), Instance("b", 2) ] };   // same webhook URL, intervals 5 s and 2 s
 
         var registry = new WebhookPacerRegistry(config);
 
@@ -229,7 +229,7 @@ public class WebhookPacingTests
     [Fact]
     public void Registry_OmittedMinSendIntervalSeconds_UsesDefaultThreeSeconds()
     {
-        var config = new NewsquackConfig { Instances = [ Instance("a", null) ] };   // key omitted — the schema default must apply (T-051; T-048 constraint 2)
+        var config = new NewsQuackConfig { Instances = [ Instance("a", null) ] };   // key omitted — the schema default must apply (T-051; T-048 constraint 2)
 
         var registry = new WebhookPacerRegistry(config);
 
@@ -239,7 +239,7 @@ public class WebhookPacingTests
     [Fact]
     public void Registry_SameWebhookUrl_ReturnsTheSamePacerInstance()
     {
-        var config = new NewsquackConfig { Instances = [ Instance("a", 2), Instance("b", 3) ] };   // two instances, one URL — the per-URL (NOT per-instance) sharing property
+        var config = new NewsQuackConfig { Instances = [ Instance("a", 2), Instance("b", 3) ] };   // two instances, one URL — the per-URL (NOT per-instance) sharing property
 
         var registry = new WebhookPacerRegistry(config);
 
@@ -251,7 +251,7 @@ public class WebhookPacingTests
     {
         // URLs not in the config (e.g. the operational dead-letter webhook — an env var, not a schema key) are still paced: an on-demand pacer with the default interval, the same instance across calls, so EVERY
         // request through the "discord" client is paced (constraint 1).
-        var registry = new WebhookPacerRegistry(new NewsquackConfig { Instances = [ Instance("a", null) ] });
+        var registry = new WebhookPacerRegistry(new NewsQuackConfig { Instances = [ Instance("a", null) ] });
 
         const string unknownUrl = "https://discord.com/api/webhooks/42/DeadLetterToken";
 
@@ -295,7 +295,7 @@ public class WebhookPacingTests
         Assert.True(condition(), $"Timed out waiting for: {what}");
     }
 
-    /// <summary>One WireMock server + the REAL production HTTP wiring (AddNewsquackHttpClients — the pacing handler sits in the "discord" pipeline) + AddWebhookPacing built from an in-test config whose webhook IS the
+    /// <summary>One WireMock server + the REAL production HTTP wiring (AddNewsQuackHttpClients — the pacing handler sits in the "discord" pipeline) + AddWebhookPacing built from an in-test config whose webhook IS the
     /// server URL, plus one REAL DiscordNotificationTarget + BoundedSendQueue + DedupEngine (over the RecordingStateStore fake) + SendWorker per configured instance. The pacer registry is resolved from DI — the exact
     /// same instance the handler consults, so tests can observe pacing state (ActiveWaits) deterministically.</summary>
     private sealed class PacingHost : IDisposable
@@ -370,14 +370,14 @@ public class WebhookPacingTests
                     },
                 });
 
-            var config = new NewsquackConfig { Instances = instances };
+            var config = new NewsQuackConfig { Instances = instances };
 
             var capture = new LogCapture();
             var store = new RecordingStateStore();
 
             var services = new ServiceCollection();
             services.AddHttpClient("").ConfigurePrimaryHttpMessageHandler(() => new FailFastHandler());   // unnamed client → loud failure if touched (named-client proof, T-020 pattern)
-            services.AddNewsquackHttpClients(new HttpSectionConfig { DiscordTimeoutSeconds = 5 });   // the REAL production wiring — the pacing handler sits in the "discord" pipeline (T-048)
+            services.AddNewsQuackHttpClients(new HttpSectionConfig { DiscordTimeoutSeconds = 5 });   // the REAL production wiring — the pacing handler sits in the "discord" pipeline (T-048)
             services.AddWebhookPacing(config);   // the shared registry built from THIS config — strictest interval per URL, default when omitted (constraint 3)
             services.AddScoped<LogEnricher>();   // scoped LogEnricher (T-004): the worker creates one scope per post — this minimal container supplies it
 

@@ -66,7 +66,7 @@ public class NamedHttpClientWiringTests
     private static ServiceProvider CreateProvider(HttpSectionConfig? http)
     {
         var services = new ServiceCollection();
-        services.AddNewsquackHttpClients(http);   // the exact wiring Program.cs uses on both host paths
+        services.AddNewsQuackHttpClients(http);   // the exact wiring Program.cs uses on both host paths
         return services.BuildServiceProvider();
     }
 

@@ -1,4 +1,4 @@
-using NewsQuack.App.Configuration;   // NewsquackConfig / InstanceConfig / FeedConfig — one scheduler per configured instance
+using NewsQuack.App.Configuration;   // NewsQuackConfig / InstanceConfig / FeedConfig — one scheduler per configured instance
 using NewsQuack.App.Fetching;        // IFeedFetcher — the fetch layer under the global throttle (T-010)
 using NewsQuack.App.Pipeline;        // PostPipelineRunner — the ordered stage chain (T-024)
 using NewsQuack.App.Services;        // IFeedErrorTracker — backoff + auto-remove (T-016 + decision 7)
@@ -17,7 +17,7 @@ namespace NewsQuack.App.Scheduling;
 /// </summary>
 public static class InstanceSchedulingRegistration
 {
-    public static IServiceCollection AddInstanceScheduling(this IServiceCollection services, NewsquackConfig config)
+    public static IServiceCollection AddInstanceScheduling(this IServiceCollection services, NewsQuackConfig config)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(config);

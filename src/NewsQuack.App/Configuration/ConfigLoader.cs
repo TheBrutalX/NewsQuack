@@ -79,7 +79,7 @@ public static class ConfigLoader
 
             var configuration = builder.Build();   // JSON parse happens here (raw JsonException / FormatException — see the catches below)
 
-            var config = configuration.Get<NewsquackConfig>();
+            var config = configuration.Get<NewsQuackConfig>();
             if (config is null)   // cannot happen: the binder constructs the root object (a non-object JSON root already threw above); kept for flow-state completeness
                 return new(null, [$"Config file '{path}' does not contain a JSON object."]);
 

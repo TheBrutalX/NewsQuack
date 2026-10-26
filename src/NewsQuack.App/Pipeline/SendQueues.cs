@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;   // [MaybeNullWhen(false)] for the non-blocking TryRead out param
 using System.Threading.Channels;   // Channel<T> — the bounded per-instance queue backing store
-using NewsQuack.App.Configuration;   // NewsquackConfig — the registry is built from the validated config at registration (decision 5)
+using NewsQuack.App.Configuration;   // NewsQuackConfig — the registry is built from the validated config at registration (decision 5)
 using NewsQuack.Core;
 
 namespace NewsQuack.App.Pipeline;
@@ -53,7 +53,7 @@ public sealed class SendQueueRegistry
 {
     private readonly IReadOnlyDictionary<string, ISendQueue> _byInstanceId;   // Ordinal — instance ids are case-sensitive (T-002 uniqueness is Ordinal)
 
-    public SendQueueRegistry(NewsquackConfig config)
+    public SendQueueRegistry(NewsQuackConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
 

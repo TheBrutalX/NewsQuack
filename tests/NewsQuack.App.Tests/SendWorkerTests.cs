@@ -1,7 +1,7 @@
 using System.Diagnostics;   // Stopwatch — deterministic-timing assertions (pinned jitter, not wall-clock luck)
 using System.Text.Json;     // JsonDocument — asserting key fields in the persisted dead-letter payload (T-022)
-using NewsQuack.App.Configuration;   // NewsquackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the registration is built from config
-using NewsQuack.App.Http;            // AddNewsquackHttpClients — the "discord" named client the target resolves (T-005)
+using NewsQuack.App.Configuration;   // NewsQuackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the registration is built from config
+using NewsQuack.App.Http;            // AddNewsQuackHttpClients — the "discord" named client the target resolves (T-005)
 using NewsQuack.App.Logging;         // LogEnricher — registered Scoped, resolved per post scope by the worker (decision 5)
 using NewsQuack.App.Pipeline;        // BoundedSendQueue / DedupEngine / SendQueueRegistry — the real pieces the worker consumes
 using NewsQuack.App.Sending;         // SendWorker + AddSendWorkers — the unit under test
@@ -380,16 +380,16 @@ public class SendWorkerTests
             serverA.Given(Request.Create()).RespondWith(Response.Create().WithStatusCode(204));
             serverB.Given(Request.Create()).RespondWith(Response.Create().WithStatusCode(204));
 
-            var config = new NewsquackConfig { Instances = [
+            var config = new NewsQuackConfig { Instances = [
                 Instance("inst-a", serverA.Url!),   // two configured instances — each with its own webhook URL (! safe: a started WireMockServer always has its Url set)
                 Instance("inst-b", serverB.Url!),
             ]};
 
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddNewsquackHttpClients(new HttpSectionConfig());   // the "discord" named client the target resolves (T-005) — exactly Program.cs's wiring
-            services.AddSingleton<NewsquackConfig>(config);              // T-024: the validated config singleton — same as Program.cs
-            services.AddSingleton(sp => new SendQueueRegistry(sp.GetRequiredService<NewsquackConfig>()));   // T-024: one queue per configured instance
+            services.AddNewsQuackHttpClients(new HttpSectionConfig());   // the "discord" named client the target resolves (T-005) — exactly Program.cs's wiring
+            services.AddSingleton<NewsQuackConfig>(config);              // T-024: the validated config singleton — same as Program.cs
+            services.AddSingleton(sp => new SendQueueRegistry(sp.GetRequiredService<NewsQuackConfig>()));   // T-024: one queue per configured instance
             services.AddSingleton<IDedupEngine>(_ => new NoopDedup());  // the worker resolves it at construction — a no-op is enough for wiring
             services.AddSingleton<IStateStore>(new RecordingStateStore());   // T-022: the sink persists through the frozen contract — the recording fake is enough for wiring
             services.AddDeadLettering(config);                          // T-022: the per-instance dead-letter sinks + notifier — part of Program.cs's exact wiring

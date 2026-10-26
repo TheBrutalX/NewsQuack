@@ -1,4 +1,4 @@
-using NewsQuack.App.Configuration;   // NewsquackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the fallback-image source
+using NewsQuack.App.Configuration;   // NewsQuackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the fallback-image source
 using NewsQuack.App.Pipeline;        // ImageResolutionStage
 using NewsQuack.Core;                // Post / PostContext — the frozen contracts
 using Xunit;
@@ -27,7 +27,7 @@ public class ImageResolutionStageTests
 
     private static PostContext Context(string? imageUrl) => new() { InstanceId = InstanceId, CurrentPost = Post(imageUrl) };
 
-    private static NewsquackConfig Config(string instanceId, string? fallbackImageUrl) => new()
+    private static NewsQuackConfig Config(string instanceId, string? fallbackImageUrl) => new()
     {
         Instances = [new InstanceConfig
         {
@@ -38,7 +38,7 @@ public class ImageResolutionStageTests
         }],
     };
 
-    private static ImageResolutionStage Stage(NewsquackConfig config) => new(config, new LogCapture().For<ImageResolutionStage>());
+    private static ImageResolutionStage Stage(NewsQuackConfig config) => new(config, new LogCapture().For<ImageResolutionStage>());
 
     [Fact]
     public async Task Image_ResolvedAtParseTime_PostUntouched()

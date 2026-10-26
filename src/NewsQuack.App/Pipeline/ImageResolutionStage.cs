@@ -1,4 +1,4 @@
-using NewsQuack.App.Configuration;   // NewsquackConfig — the validated, immutable config (Discord FallbackImageUrl lookup)
+using NewsQuack.App.Configuration;   // NewsQuackConfig — the validated, immutable config (Discord FallbackImageUrl lookup)
 using NewsQuack.Core;
 using Microsoft.Extensions.Logging;   // ILogger<T>
 
@@ -14,10 +14,10 @@ namespace NewsQuack.App.Pipeline;
 /// </summary>
 public sealed class ImageResolutionStage : IPostStage
 {
-    private readonly NewsquackConfig _config;   // validated at boot — immutable init-only object, safe to share as a singleton dependency
+    private readonly NewsQuackConfig _config;   // validated at boot — immutable init-only object, safe to share as a singleton dependency
     private readonly ILogger<ImageResolutionStage> _logger;
 
-    public ImageResolutionStage(NewsquackConfig config, ILogger<ImageResolutionStage> logger)
+    public ImageResolutionStage(NewsQuackConfig config, ILogger<ImageResolutionStage> logger)
     {
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(logger);

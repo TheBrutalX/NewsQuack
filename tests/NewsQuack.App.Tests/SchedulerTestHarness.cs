@@ -1,4 +1,4 @@
-using NewsQuack.App.Configuration;   // NewsquackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the harness builds a one-instance config
+using NewsQuack.App.Configuration;   // NewsQuackConfig / InstanceConfig / FeedConfig / DiscordTargetConfig — the harness builds a one-instance config
 using NewsQuack.App.Fetching;        // IFeedFetcher (the real FeedFetcher from the test host)
 using NewsQuack.App.Logging;         // LogEnricher — registered Scoped, resolved per cycle/feed scope by the scheduler
 using NewsQuack.App.Parsing;         // FeedParser / FeedItemMapper / FeedDateParser — the REAL two-pass parser (internal ctor via InternalsVisibleTo)
@@ -110,7 +110,7 @@ internal sealed class SchedulerTestHarness : IDisposable
 
     private readonly FeedFetcherTestHost _http;
     private readonly IServiceProvider _scopeProvider;
-    private readonly NewsquackConfig _config;   // T-031: kept so BuildRestartedSchedulerAsync can rebuild a FRESH send-queue registry over the same instances
+    private readonly NewsQuackConfig _config;   // T-031: kept so BuildRestartedSchedulerAsync can rebuild a FRESH send-queue registry over the same instances
     private readonly string _instanceId;
     private readonly TimeSpan _pollInterval;
     private readonly IReadOnlyList<FeedConfig> _feeds;
@@ -130,7 +130,7 @@ internal sealed class SchedulerTestHarness : IDisposable
     public LogCapture Logs { get; }
 
     private SchedulerTestHarness(
-        FeedFetcherTestHost http, IServiceProvider scopeProvider, NewsquackConfig config, string instanceId, TimeSpan pollInterval, IReadOnlyList<FeedConfig> feeds,
+        FeedFetcherTestHost http, IServiceProvider scopeProvider, NewsQuackConfig config, string instanceId, TimeSpan pollInterval, IReadOnlyList<FeedConfig> feeds,
         FakeFeedStateStore store, FeedErrorTracker tracker, SendQueueRegistry registry, PostPipelineRunner runner, IFeedParser parser, IServiceScopeFactory scopeFactory, LogCapture logs)
     {
         _http = http;
@@ -156,7 +156,7 @@ internal sealed class SchedulerTestHarness : IDisposable
 
         var feeds = feedPaths.Select(path => new FeedConfig { Url = $"{http.BaseUrl}{path}" }).ToList();   // absolute URLs into the stub server
 
-        var config = new NewsquackConfig
+        var config = new NewsQuackConfig
         {
             Instances = [new InstanceConfig
             {
