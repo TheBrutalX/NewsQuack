@@ -134,4 +134,92 @@ public class JsonLoggingBootTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task Boot_ValidConfigWithLogLevelDebug_EfCoreCommandLinesPresentOnStdout()
+    {
+        var (dotnet, appAssembly) = AppBootHelper.FindApp();
+        if (dotnet is null || appAssembly is null) return;   // no dotnet on PATH or no App build output — cannot run end-to-end
+
+        var dir = AppBootHelper.MakeTempDir("newsquack-t054-boot");
+
+        try
+        {
+            // T-054: Logging.Level=Debug ⇒ the EF Core cap is inactive (no override) — the startup migration's command logging reaches stdout.
+            var json = $$"""{ "Instances": [ {{ConfigTestHelper.Instance("main", 15)}} ], "Logging": { "Level": "Debug" } }""";
+            var configFile = AppBootHelper.WriteFile(dir, "newsquack.json", json);
+
+            // T-030: the health listener is enabled by default — pin a unique port so parallel boot tests do not collide on 8081.
+            var port = AppBootHelper.GetFreePort();
+            using var boot = AppBootHelper.StartApp(dotnet, appAssembly, [configFile], psi =>
+            {
+                psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture);
+                psi.Environment["NEWSQUACK_DATABASE"] = Path.Combine(dir, "newsquack.db");   // fresh temp DB per test ⇒ the startup migration's commands execute
+            });
+
+            Assert.False(boot.Process.WaitForExit((int)StartTimeout.TotalMilliseconds), "host exited right after startup — expected it to keep running");
+            boot.Process.Kill(entireProcessTree: true);
+
+            var stdout = await boot.Stdout;
+
+            var efLines = new List<string>();
+            foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                using var doc = JsonDocument.Parse(line);   // every line is still valid JSON under Serilog
+                if (doc.RootElement.GetProperty("logger").GetString()!.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal))
+                    efLines.Add(line);
+            }
+
+            Assert.True(efLines.Count > 0, "expected at least one Microsoft.EntityFrameworkCore line on stdout at Debug level — the cap is inactive there and the migration's command logging must reach stdout");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Boot_ValidConfigDefaultLevel_NoEfCoreDebugOrInfoLinesOnStdout()
+    {
+        var (dotnet, appAssembly) = AppBootHelper.FindApp();
+        if (dotnet is null || appAssembly is null) return;   // no dotnet on PATH or no App build output — cannot run end-to-end
+
+        var dir = AppBootHelper.MakeTempDir("newsquack-t054-boot");
+
+        try
+        {
+            // T-054: default Information level ⇒ the EF Core cap is active (effective minimum Warning) — the migration's command logging disappears.
+            var json = $$"""{ "Instances": [ {{ConfigTestHelper.Instance("main", 15)}} ] }""";
+            var configFile = AppBootHelper.WriteFile(dir, "newsquack.json", json);
+
+            // T-030: the health listener is enabled by default — pin a unique port so parallel boot tests do not collide on 8081.
+            var port = AppBootHelper.GetFreePort();
+            using var boot = AppBootHelper.StartApp(dotnet, appAssembly, [configFile], psi =>
+            {
+                psi.Environment["NEWSQUACK_HEALTH__PORT"] = port.ToString(CultureInfo.InvariantCulture);
+                psi.Environment["NEWSQUACK_DATABASE"] = Path.Combine(dir, "newsquack.db");   // fresh temp DB per test ⇒ the startup migration runs under the cap
+            });
+
+            Assert.False(boot.Process.WaitForExit((int)StartTimeout.TotalMilliseconds), "host exited right after startup — expected it to keep running");
+            boot.Process.Kill(entireProcessTree: true);
+
+            var stdout = await boot.Stdout;
+
+            foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                using var doc = JsonDocument.Parse(line);   // every line is still valid JSON under Serilog
+                var root = doc.RootElement;
+                if (!root.GetProperty("logger").GetString()!.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal))
+                    continue;
+
+                // The cap suppresses the migration's command logging (EF warnings deliberately not pinned — that would over-pin).
+                var level = root.GetProperty("level").GetString();
+                Assert.True(level is not ("Debug" or "Information"), $"EF Core line at Debug/Information survived the cap: {line}");
+            }
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }

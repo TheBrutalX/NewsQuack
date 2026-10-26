@@ -16,7 +16,9 @@ using Microsoft.AspNetCore.Hosting;   // ConfigureKestrel extension for the heal
 using Microsoft.EntityFrameworkCore;  // T-015: AddDbContextFactory + MigrateAsync
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;   // still used by MigrateStoreAsync (ILoggerFactory from DI — now the Serilog-backed factory)
+using Serilog;                        // T-054: AddSerilog + WriteTo.Console extension methods
+using Serilog.Events;                 // T-054: LogEventLevel for the minimum/EF-cap wiring
 
 // T-002: load + validate the v2 config before anything else runs. On any failure, print each message to stderr
 // (one per line) and exit with code 1 — never throw out of startup, never print a stack trace.
@@ -58,7 +60,7 @@ if (health.Enabled)
 
     webBuilder.Services.AddFeedParsing();    // T-012: IFeedParser (two-pass, per-item isolation) + date parser + item mapper
 
-    ApplyJsonLogging(webBuilder.Services, webBuilder.Logging, config);   // T-030: re-apply T-004's JSON-on-stdout setup — WebApplication's default providers would clobber it
+    ApplySerilogLogging(webBuilder.Services, config);   // T-054: Serilog as the host's logging provider (frozen T-004 JSON line on stdout) — WebApplication's default providers would clobber it
     webBuilder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(health.Port));
 
     AddStateStore(webBuilder.Services);   // T-015: state store + retention job (same wiring as the generic host path)
@@ -123,7 +125,7 @@ else
 
     builder.Services.AddFeedParsing();    // T-012: exactly the parsing-layer wiring of the health path above
 
-    ApplyJsonLogging(builder.Services, builder.Logging, config);
+    ApplySerilogLogging(builder.Services, config);
 
     // Per-worker enrichment (T-004): one LogEnricher per DI scope; later tasks activate it inside their worker scopes so every
     // line emitted there carries "instanceId" / "url".
@@ -220,12 +222,22 @@ static async Task<bool> MigrateStoreAsync(IServiceProvider services)
     }
 }
 
-// T-030/T-004: the JSON-on-stdout logging setup shared by both host paths, so behavior is identical on each.
-static void ApplyJsonLogging(IServiceCollection services, ILoggingBuilder logging, NewsQuackConfig config)
+// T-054: the Serilog logging setup shared by both host paths, so behavior is identical on each. The AddSerilog overload below is the one of
+// Serilog.Extensions.Hosting v10's own samples for WebApplicationBuilder/HostApplicationBuilder (its UseSerilog overloads are legacy-IHostBuilder-only):
+// it replaces the host's default ILoggerFactory with a Serilog-backed singleton, sets static Log.Logger, and disposes via Log.CloseAndFlush() at
+// host shutdown. The frozen T-004 JSON line on stdout comes from the custom ITextFormatter (see tasks/t-054); Logging.Level is mapped to the
+// Serilog minimum; EF Core is capped at Warning unless the global level is Debug/Trace, in which case it follows the global level.
+static void ApplySerilogLogging(IServiceCollection services, NewsQuackConfig config)
 {
-    // Replace the default console/debug providers with the JSON line provider and honor Logging.Level from the validated config.
-    // SetMinimumLevel is the host's standard level-configuration mechanism — no custom filtering code in the provider itself.
-    logging.ClearProviders();
-    logging.SetMinimumLevel(JsonLoggerProvider.ParseLevel(config.Logging?.Level));
-    services.AddSingleton<ILoggerProvider>(new JsonLoggerProvider(Console.Out));   // exactly T-004's registration (singleton ILoggerProvider instance)
+    services.AddSerilog((sp, loggerConfiguration) =>
+    {
+        var minimum = SerilogLevels.ParseLevel(config.Logging?.Level);
+        loggerConfiguration.MinimumLevel.Is(minimum);
+
+        if (minimum > LogEventLevel.Debug)   // Information/Warning/Error/Critical — cap EF Core noise; Debug/Trace: no override
+            loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning);
+
+        loggerConfiguration.Enrich.FromLogContext();   // required: LogEnricher pushes "instanceId"/"url" through Serilog's LogContext
+        loggerConfiguration.WriteTo.Console(new SerilogJsonLineFormatter());   // ITextFormatter overload — no output template (the frozen shape is not expressible in one)
+    });
 }

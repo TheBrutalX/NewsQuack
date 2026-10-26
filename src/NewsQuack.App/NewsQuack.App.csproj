@@ -14,6 +14,12 @@
   <ItemGroup>
     <!-- T-012: primary feed parser (ReadFromString). Version centralized in Directory.Packages.props. -->
     <PackageReference Include="CodeHollow.FeedReader" />
+
+    <!-- T-054: Serilog as the host's logging provider — frozen T-004 JSON line on stdout via a custom ITextFormatter,
+         Logging.Level mapped to the Serilog minimum, EF Core capped at Warning unless the global level is Debug/Trace. -->
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Sinks.Console" />
   </ItemGroup>
 
   <ItemGroup>
