@@ -15,8 +15,8 @@ namespace NewsQuack.App.Discord;
 /// </summary>
 public sealed class WebhookPacerRegistry
 {
-    /// <summary>The v1.0 default minimum interval in seconds — applied when <c>MinSendIntervalSeconds</c> is omitted (≤ 30 req/min, Discord's per-webhook limit).</summary>
-    public const int DefaultMinSendIntervalSeconds = 2;
+    /// <summary>The v1.0 default minimum interval in seconds — applied when <c>MinSendIntervalSeconds</c> is omitted (default 3 s ⇒ at most 21 requests in any closed 60 s rolling window, sustained rate exactly 20/min, strictly below Discord's documented ~30 req/min per-webhook limit by construction).</summary>
+    public const int DefaultMinSendIntervalSeconds = 3;
 
     private readonly ConcurrentDictionary<string, WebhookPacer> _byUrl;   // normalized Ordinal keys — the canonical webhook URL IS the key (constraint 3)
 
@@ -35,7 +35,7 @@ public sealed class WebhookPacerRegistry
                 continue;
 
             var key = NormalizeKey(discord.WebhookUrl!);   // ! safe: the IsNullOrWhiteSpace check above guarantees non-null, non-empty
-            var seconds = discord.MinSendIntervalSeconds ?? DefaultMinSendIntervalSeconds;   // omitted ⇒ default 2 s (constraint 2)
+            var seconds = discord.MinSendIntervalSeconds ?? DefaultMinSendIntervalSeconds;   // omitted ⇒ default 3 s (T-051; T-048 constraint 2)
 
             // strictest wins on conflict (constraint 3): the smallest configured interval applies to a shared URL
             intervals[key] = intervals.TryGetValue(key, out var existing) ? Math.Min(existing, seconds) : seconds;

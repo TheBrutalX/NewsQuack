@@ -18,7 +18,7 @@ namespace NewsQuack.App.Tests;
 /// <summary>
 /// T-048: end-to-end pacing regression tests through the REAL <see cref="DiscordNotificationTarget"/> pointed at a self-hosted WireMock serving SEQUENCED answers, drained by the REAL per-instance
 /// <see cref="SendWorker"/>, with the REAL production HTTP wiring in front (AddNewsquackHttpClients + AddWebhookPacing — the pacing handler is part of the "discord" client's pipeline exactly as in
-/// Program.cs). Pins issue #56 as a whole-system property: no two requests to the same webhook URL start closer than the configured minimum interval (default 2 s ⇒ ≤ 30 req/min); pacing counts REQUESTS,
+/// Program.cs). Pins issue #56 as a whole-system property: no two requests to the same webhook URL start closer than the configured minimum interval (default 3 s ⇒ at most 21 requests per closed 60 s window, exactly 20/min sustained); pacing counts REQUESTS,
 /// not posts (the fallback swap's second POST is paced too); pacing state is shared by URL across instances (strictest interval wins); pacing COMPOSES with retry/backoff/Retry-After (never replaces it);
 /// and cancellation during a pacing wait surfaces promptly without blocking the shutdown drain. Nothing in the path is scripted: real target + real worker + real queue + real dedup engine; only the HTTP
 /// answers are sequenced via a WithCallback counter (WireMock 2.x has no ordered stubs). Timing assertions use the PACER'S OWN recorded reservation stamps (the ground truth for request STARTS — server-side
@@ -125,9 +125,9 @@ public class WebhookPacingTests
     }
 
     [Fact]
-    public async Task Pacing_TwoInstancesSameWebhookUrl_CombinedTrafficWithinThirtyPerMinute()
+    public async Task Pacing_TwoInstancesSameWebhookUrl_CombinedTrafficWithinTwentyPerMinute()
     {
-        // Two instances/queues against ONE webhook URL, MinSendIntervalSeconds omitted ⇒ the default 2 s floor applies (constraint 2). The pacer is shared by URL, NOT per instance (constraint 3): combined traffic
+        // Two instances/queues against ONE webhook URL, MinSendIntervalSeconds omitted ⇒ the default 3 s floor applies (T-051; T-048 constraint 2). The pacer is shared by URL, NOT per instance (constraint 3): combined traffic
         // respects one budget — N requests span ≥ (N−1) × interval. A per-INSTANCE pacer would let both instances' first requests start at once and shrink the span below that floor.
         using var host = PacingHost.Create(2);   // both instances point at the same server URL with the default interval
 
@@ -150,8 +150,8 @@ public class WebhookPacingTests
         Assert.Equal(3, starts.Count);
 
         var span = starts[^1] - starts[0];
-        Assert.True(span >= TimeSpan.FromSeconds(4) - ClockEpsilon, $"the 3 combined requests spanned only {span} — with a shared 2 s per-URL floor they must span ≥ (3−1) × 2 s (≤ ~30 req/min on that webhook); a per-INSTANCE pacer would let both first requests start at once and shrink the span");
-        Assert.True(span < TimeSpan.FromSeconds(9), $"the 3 combined requests spanned {span} — far beyond the two pace floors: no runaway pacing");
+        Assert.True(span >= TimeSpan.FromSeconds(6) - ClockEpsilon, $"the 3 combined requests spanned only {span} — with a shared 3 s per-URL floor they must span ≥ (3−1) × 3 s (≤ 20 req/min sustained on that webhook); a per-INSTANCE pacer would let both first requests start at once and shrink the span");
+        Assert.True(span < TimeSpan.FromSeconds(12), $"the 3 combined requests spanned {span} — far beyond the two pace floors: no runaway pacing");
 
         Assert.Equal(3, host.Store.MarkDeliveredCalls.Count);   // all delivered — shared pacing delays requests, it never drops them
     }
@@ -159,7 +159,7 @@ public class WebhookPacingTests
     [Fact]
     public async Task Pacing_CancellationDuringWait_ReturnsPromptlyAndDoesNotBlockDrain()
     {
-        // Default interval (2 s, omitted). Post 1 sends immediately (the first request is never delayed) and confirms; post 2 then sits in the pacing wait for the floor. Cancelling while that wait is active must
+        // Default interval (3 s, T-051). Post 1 sends immediately (the first request is never delayed) and confirms; post 2 then sits in the pacing wait for the floor. Cancelling while that wait is active must
         // surface OCE promptly — a pace floor must never block the shutdown drain (constraint 6 / T-031's bounded window).
         using var host = PacingHost.Create(1);
 
@@ -180,7 +180,7 @@ public class WebhookPacingTests
         await host.Worker.StopAsync(CancellationToken.None);   // cancels the stopping token — the in-flight pace wait must surface OCE promptly
         stoppedAt.Stop();
 
-        Assert.True(stoppedAt.Elapsed < TimeSpan.FromSeconds(1.5), $"stop took {stoppedAt.Elapsed} — cancellation during the pacing wait must surface promptly (the remaining pace floor is ≥ ~1.8 s; a blocked drain would have waited it out)");
+        Assert.True(stoppedAt.Elapsed < TimeSpan.FromSeconds(1.5), $"stop took {stoppedAt.Elapsed} — cancellation during the pacing wait must surface promptly (up to ~3 s of pace floor remain; a blocked drain would have waited it out)");
         Assert.Single(host.Store.MarkDeliveredCalls);   // post 2 dropped unconfirmed — re-delivered on the next start (at-least-once, T-021 decision 2)
     }
 
@@ -227,13 +227,13 @@ public class WebhookPacingTests
     }
 
     [Fact]
-    public void Registry_OmittedMinSendIntervalSeconds_UsesDefaultTwoSeconds()
+    public void Registry_OmittedMinSendIntervalSeconds_UsesDefaultThreeSeconds()
     {
-        var config = new NewsquackConfig { Instances = [ Instance("a", null) ] };   // key omitted — the schema default must apply (constraint 2)
+        var config = new NewsquackConfig { Instances = [ Instance("a", null) ] };   // key omitted — the schema default must apply (T-051; T-048 constraint 2)
 
         var registry = new WebhookPacerRegistry(config);
 
-        Assert.Equal(TimeSpan.FromSeconds(WebhookPacerRegistry.DefaultMinSendIntervalSeconds), registry.For(ConfigTestHelper.WebhookUrl).Interval);
+        Assert.Equal(TimeSpan.FromSeconds(3), registry.For(ConfigTestHelper.WebhookUrl).Interval);   // literal, not constant-relative: pins the pre-registered path against a future silent move of the default
     }
 
     [Fact]
@@ -255,7 +255,7 @@ public class WebhookPacingTests
 
         const string unknownUrl = "https://discord.com/api/webhooks/42/DeadLetterToken";
 
-        Assert.Equal(TimeSpan.FromSeconds(WebhookPacerRegistry.DefaultMinSendIntervalSeconds), registry.For(unknownUrl).Interval);
+        Assert.Equal(TimeSpan.FromSeconds(3), registry.For(unknownUrl).Interval);   // literal, not constant-relative: pins the on-demand fallback against a future silent move of the default (T-051)
         Assert.Same(registry.For(unknownUrl), registry.For(unknownUrl));   // shared state for unknown URLs too — no unpaced path through the "discord" client
     }
 
@@ -355,7 +355,7 @@ public class WebhookPacingTests
 
             var server = WireMockServer.Start();   // dynamic free port — no fixed binding (CI-safe)
 
-            // The in-test config: every instance points at the SAME server URL (the sharing property under test); MinSendIntervalSeconds omitted ⇒ default 2 s.
+            // The in-test config: every instance points at the SAME server URL (the sharing property under test); MinSendIntervalSeconds omitted ⇒ default 3 s (T-051).
             var instances = new List<InstanceConfig>();
             for (var i = 0; i < instanceCount; i++)
                 instances.Add(new InstanceConfig
@@ -366,7 +366,7 @@ public class WebhookPacingTests
                     Discord = new DiscordTargetConfig
                     {
                         WebhookUrl = server.Url,   // webhook = the sequenced server — pacing state is keyed by its normalized form (registry normalizes config keys and request URIs identically, constraint 3)
-                        MinSendIntervalSeconds = minSendIntervalSeconds,   // omitted ⇒ default 2 s (constraint 2)
+                        MinSendIntervalSeconds = minSendIntervalSeconds,   // omitted ⇒ default 3 s (T-051; T-048 constraint 2)
                     },
                 });
 

@@ -22,8 +22,8 @@ public sealed class DiscordTargetConfig
     [HttpUrl]
     public string? FallbackImageUrl { get; init; }
 
-    /// <summary>T-048: minimum interval in seconds between two requests to this webhook URL (1..60). Omitted ⇒ default 2 s (≤ 30 req/min — Discord's
-    /// per-webhook limit). Shared across instances configured with the same webhook URL; the strictest (smallest) interval wins on conflict.</summary>
+    /// <summary>T-048: minimum interval in seconds between two requests to this webhook URL (1..60). Omitted ⇒ default 3 s (at most 21 requests in any closed
+    /// 60 s rolling window, sustained rate exactly 20/min — strictly below Discord's documented ~30 req/min per-webhook limit by construction). Shared across instances configured with the same webhook URL; the strictest (smallest) interval wins on conflict.</summary>
     [Range(1, 60)]
     public int? MinSendIntervalSeconds { get; init; }
 }
