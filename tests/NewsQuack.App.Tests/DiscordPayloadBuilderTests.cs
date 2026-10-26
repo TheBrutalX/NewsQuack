@@ -153,16 +153,76 @@ public class DiscordPayloadBuilderTests
     [Fact]
     public void Payload_Markdown_TemplateExactWithOptionalPartsOmitted()
     {
-        // Null link + empty description + no image: only the bold title remains.
+        // Null link + empty description + no image: only the bold title remains — plus the always-present T-052 feed section.
         var bare = Parse(DiscordPayloadBuilder.BuildPayload(MakePost(title: "My Title", link: null, description: null), MakeConfig(), DiscordMode.Markdown));
-        Assert.Equal("**My Title**", bare.GetProperty("content").GetString());
+        Assert.Equal("**My Title**\n\nFeed: https://example.com/feed.xml", bare.GetProperty("content").GetString());
 
-        // All parts present: the frozen template, byte for byte.
+        // All parts present: the amended template (T-020 frozen, T-052 amendment), byte for byte.
         var full = Parse(DiscordPayloadBuilder.BuildPayload(
             MakePost(title: "My Title", description: "<p>Plain &amp; simple</p>", imageUrl: "https://img.example.com/post.png"),
             MakeConfig(), DiscordMode.Markdown));
 
-        Assert.Equal("**My Title**\nhttps://example.com/item\n\nPlain & simple\n\nhttps://img.example.com/post.png", full.GetProperty("content").GetString());
+        Assert.Equal("**My Title**\nhttps://example.com/item\n\nPlain & simple\n\nhttps://img.example.com/post.png\n\nFeed: https://example.com/feed.xml", full.GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public void BuildEmbedPayload_PostWithSourceUrl_FooterContainsFeedLabelAndUrl()
+    {
+        var payload = Parse(DiscordPayloadBuilder.BuildPayload(MakePost(), MakeConfig(), DiscordMode.Embed));
+
+        Assert.Equal("Feed: https://example.com/feed.xml", payload.GetProperty("embeds")[0].GetProperty("footer").GetProperty("text").GetString());   // byte-exact — the default SourceUrl
+    }
+
+    [Fact]
+    public void BuildForumPayload_SamePost_FooterIdenticalToEmbedMode()
+    {
+        var post = MakePost(description: "<p>Body &amp; more</p>", imageUrl: "https://img.example.com/p.png");
+
+        var embedFooter = Parse(DiscordPayloadBuilder.BuildPayload(post, MakeConfig("embed", color: 0x112233), DiscordMode.Embed))
+            .GetProperty("embeds")[0].GetProperty("footer").GetRawText();
+        var forumFooter = Parse(DiscordPayloadBuilder.BuildPayload(post, MakeConfig("forum", color: 0x112233), DiscordMode.Forum))
+            .GetProperty("embeds")[0].GetProperty("footer").GetRawText();
+
+        Assert.Equal(embedFooter, forumFooter);   // shared BuildEmbedObject — the footer is byte-identical in both modes
+    }
+
+    [Fact]
+    public void BuildMarkdownPayload_PostWithSourceUrl_ContentEndsWithFeedSection()
+    {
+        const string feedSection = "\n\nFeed: https://example.com/feed.xml";
+
+        // Bare post: the feed section lands right after the title.
+        var bare = Parse(DiscordPayloadBuilder.BuildPayload(MakePost(link: null, description: null), MakeConfig(), DiscordMode.Markdown));
+        Assert.EndsWith(feedSection, bare.GetProperty("content").GetString()!);
+
+        // All parts present: the feed section is still the final part of the content.
+        var full = Parse(DiscordPayloadBuilder.BuildPayload(
+            MakePost(description: "<p>Plain &amp; simple</p>", imageUrl: "https://img.example.com/post.png"),
+            MakeConfig(), DiscordMode.Markdown));
+        Assert.EndsWith(feedSection, full.GetProperty("content").GetString()!);
+    }
+
+    [Fact]
+    public void BuildEmbedPayload_SourceUrlOver2048_FooterTruncatedAtExactly2048()
+    {
+        var post = MakePost() with { SourceUrl = new string('u', 2100) };   // "Feed: " + 2100 chars > the 2048 footer limit
+
+        var footer = Parse(DiscordPayloadBuilder.BuildPayload(post, MakeConfig(), DiscordMode.Embed))
+            .GetProperty("embeds")[0].GetProperty("footer").GetProperty("text").GetString()!;
+
+        Assert.Equal(2048, footer.Length);                       // exactly the limit — never over (Discord would reject the whole embed)
+        Assert.EndsWith("…", footer);                            // single trailing ellipsis when cutting
+        Assert.Equal("Feed: " + new string('u', 2041), footer[..2047]);   // …and nothing else was altered
+    }
+
+    [Fact]
+    public void BuildEmbedPayload_NoDescriptionLinkOrImage_FooterStillPresent()
+    {
+        var embed = Parse(DiscordPayloadBuilder.BuildPayload(MakePost(link: null, description: null), MakeConfig(), DiscordMode.Embed))
+            .GetProperty("embeds")[0];
+
+        Assert.True(embed.TryGetProperty("footer", out _));      // unconditional — unlike every other optional field in this method
+        Assert.Equal("Feed: https://example.com/feed.xml", embed.GetProperty("footer").GetProperty("text").GetString());
     }
 
     [Fact]

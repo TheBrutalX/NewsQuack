@@ -23,6 +23,9 @@ public static class DiscordPayloadBuilder
     public const int AuthorNameLimit = 512;
     public const int AuthorUrlLimit = 1024;
 
+    // T-052: Discord's embed footer text limit — the feed-source footer must never exceed it or Discord rejects the whole embed.
+    public const int FooterTextLimit = 2048;
+
     /// <summary>Maps a config "Mode" value to its enum, case-insensitively. Unknown values fall back to embed — the schema
     /// ([EnumLike]) already rejects anything outside embed|forum|markdown at validation time, so this is belt-and-braces.</summary>
     public static DiscordMode ParseMode(string? mode) => (mode ?? "embed").Trim().ToLowerInvariant() switch
@@ -59,10 +62,11 @@ public static class DiscordPayloadBuilder
 
     private static string BuildMarkdownPayload(Post post, DiscordTargetConfig config)
     {
-        // Frozen template (T-020): **<title>**\n<link>\n\n<plain-text description>\n\n<effective image url> — each optional part is
-        // omitted entirely when absent. PlainText collapses every whitespace run to a single space, so the assembled string can
-        // never contain 3+ consecutive newlines (the template's own \n\n separators are the only line breaks). Title and description
-        // are truncated to their embed limits before assembly so no part ever exceeds its limit in any mode.
+        // Amended template (T-020 frozen, T-052 amendment): **<title>**\n<link>\n\n<plain-text description>\n\n<effective image url>\n\nFeed: <sourceUrl> —
+        // each previously-optional part is still omitted entirely when absent; the feed section is now always present (Post.SourceUrl is
+        // required). PlainText collapses every whitespace run to a single space, so the assembled string can never contain 3+ consecutive
+        // newlines (the template's own \n\n separators are the only line breaks). Title and description are truncated to their embed limits
+        // before assembly so no part ever exceeds its limit in any mode.
         var markdown = new StringBuilder();
 
         markdown.Append("**").Append(TruncateWithEllipsis(post.Title, EmbedTitleLimit)).Append("**");
@@ -77,6 +81,9 @@ public static class DiscordPayloadBuilder
         var image = EffectiveImage(post, config);
         if (image is not null)
             markdown.Append("\n\n").Append(image);
+
+        // T-052: final feed-source section — an explicit decision amending the frozen T-020 template (recorded in tasks/t-052).
+        markdown.Append("\n\n").Append(TruncateWithEllipsis("Feed: " + post.SourceUrl, FooterTextLimit));
 
         var payload = new JsonObject();
         payload["content"] = markdown.ToString();
@@ -112,6 +119,10 @@ public static class DiscordPayloadBuilder
 
         // ISO 8601 UTC with Z suffix — invariant culture, no CurrentCulture anywhere (T-020 date rule).
         embed["timestamp"] = post.PublishedAt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+
+        // T-052: feed source — always present (Post.SourceUrl is required) and truncated to Discord's footer limit. Discord renders the
+        // footer on the same bottom line to the LEFT of the timestamp, i.e. exactly "before the date".
+        embed["footer"] = new JsonObject { ["text"] = TruncateWithEllipsis("Feed: " + post.SourceUrl, FooterTextLimit) };
 
         var image = EffectiveImage(post, config);
         if (image is not null)                           // omitted when no effective image at all
