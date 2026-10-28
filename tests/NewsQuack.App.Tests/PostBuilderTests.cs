@@ -155,10 +155,11 @@ public class PostBuilderTests
         Assert.Null(rss2.FeedError);
 
         // Exact decoded plain text — no residual tags or entities. Item 2's <guid …> is literal feed content (double-escaped in
-        // the source), not residual markup; item 4's image stays on ImageUrl, out of the description.
+        // the source), not residual markup; item 4's image stays on ImageUrl, out of the description. T-055: item 1's literal
+        // newline survives as a real line break (the img-only final line trims away).
         Assert.Equal(
             [
-                "The new release cuts build times by 30% & fixes a regression in the optimizer. See the full changelog for details.",
+                "The new release cuts build times by 30% & fixes a regression in the optimizer.\nSee the full changelog for details.",
                 "What <guid isPermaLink=\"true\"> actually means and how to validate feeds before parsing them.",
                 "We deployed at local midnight to avoid the traffic peak. Numbers & lessons inside.",
                 "Join us & ask anything about item IDs, GUIDs & at-least-once delivery.",
@@ -179,6 +180,24 @@ public class PostBuilderTests
             atom.Posts.Select(p => p.Description).ToList());
 
         Assert.All(rss2.Posts.Concat(atom.Posts), p => Assert.DoesNotMatch(ResidualEntity, p.Description ?? string.Empty));
+    }
+
+    [Fact]
+    public async Task Build_MultiLineDescFixture_CvefeedSampleDecodedEndToEnd()
+    {
+        // T-055 (issue #71): the real parse path (FeedItemMapper → HtmlPlainText.Decode) preserves the canonical cvefeed
+        // sample's line structure byte-for-byte — labelled sections on separate lines, one blank line between them.
+        var (parser, _) = CreatePlatformParser();
+
+        var result = await parser.ParseAsync(FixtureLoader.Load("rss2-multiline-desc.xml"), Source);
+
+        Assert.Null(result.FeedError);
+        Assert.Equal(0, result.ItemErrorCount);
+
+        var post = Assert.Single(result.Posts);
+        Assert.Equal(
+            "CVE ID : CVE-2026-78674\n\nPublished : Mercoledì 28 Ottobre 2026 19:21 | 28 minuti ago\n\nDescription : The BPMN System REST APIs allow an attacker to bypass access controls.\n\nAn authenticated user can leverage this flaw to read arbitrary data.\n--\nVisit the link for more details about this vulnerability.",
+            post.Description);
     }
 
     [Fact]

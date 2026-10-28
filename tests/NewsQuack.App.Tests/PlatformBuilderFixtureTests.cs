@@ -260,7 +260,7 @@ public class PlatformBuilderFixtureTests
     private static readonly IReadOnlyList<ExpectedPost> ExpectedRss2 =
     [
         new("https://example.com/blog/compiler-release", "New compiler release & performance notes",
-            "The new release cuts build times by 30% & fixes a regression in the optimizer. See the full changelog for details.",
+            "The new release cuts build times by 30% & fixes a regression in the optimizer.\nSee the full changelog for details.",   // T-055: the fixture's literal newline survives as a line break (img-only final line trims away)
             "https://example.com/blog/compiler-release", new PostAuthor("Alice Nguyen", null), Utc(2025, 10, 21, 23, 42, 10),
             "https://example.com/img/compiler-chart.png"),
         new("https://example.com/blog/rss-validation", "A practical guide to RSS validation",

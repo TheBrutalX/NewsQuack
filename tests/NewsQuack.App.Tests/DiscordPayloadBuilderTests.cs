@@ -99,8 +99,9 @@ public class DiscordPayloadBuilderTests
     public void Payload_AllModes_HtmlDescription_StrippedToPlainTextCoherently()
     {
         // Tags + common entities + decimal and hex numeric refs — one shared helper, so all three modes must yield the same text.
+        // T-055: the <br/> becomes a real newline (intra-line runs still collapse), so the plain text is two lines.
         const string html = "<p>Hello &amp; welcome</p><br/><b>bold</b> &quot;quoted&quot; &#39;single&#39; &#60;tag&#62;&#x2F;";
-        const string expectedPlain = "Hello & welcome bold \"quoted\" 'single' <tag>/";
+        const string expectedPlain = "Hello & welcome\nbold \"quoted\" 'single' <tag>/";
 
         var post = MakePost(title: "Html Post", description: html);
         var config = MakeConfig();
@@ -112,7 +113,7 @@ public class DiscordPayloadBuilderTests
         var markdownContent = Parse(DiscordPayloadBuilder.BuildPayload(post, config, DiscordMode.Markdown))
             .GetProperty("content").GetString()!;
 
-        Assert.Equal(expectedPlain, embedText);   // tags gone, entities decoded (incl. &#60; → < and &#x2F; → /), whitespace collapsed
+        Assert.Equal(expectedPlain, embedText);   // tags gone, entities decoded (incl. &#60; → < and &#x2F; → /), <br/> became a newline, intra-line runs collapsed
         Assert.Equal(embedText, forumText);       // coherent across modes…
         Assert.DoesNotContain("<p>", markdownContent);   // …and no raw markup leaks into the markdown template
         Assert.Contains(expectedPlain, markdownContent);
@@ -122,6 +123,29 @@ public class DiscordPayloadBuilderTests
 
         Assert.Null(DiscordPayloadBuilder.PlainText(emptyPost.Description));
         Assert.False(Parse(DiscordPayloadBuilder.BuildPayload(emptyPost, config, DiscordMode.Embed)).GetProperty("embeds")[0].TryGetProperty("description", out _));
+    }
+
+    [Fact]
+    public void BuildEmbedPayload_MultiLineDescription_NewlinesSurviveTo4096Truncation()
+    {
+        // T-055: descriptions may now carry line breaks — the payload layer must not re-flatten them.
+        const string multiLine = "First section &amp; notes<br/>Second line\n\nThird <b>bold</b> tail";
+        var post = MakePost(description: multiLine);
+
+        var description = Parse(DiscordPayloadBuilder.BuildPayload(post, MakeConfig(), DiscordMode.Embed))
+            .GetProperty("embeds")[0].GetProperty("description").GetString()!;
+
+        Assert.Equal("First section & notes\nSecond line\n\nThird bold tail", description);   // exact multi-line value — the \ns survive to the wire
+
+        // Over-4096 multi-line: truncation still yields exactly 4096 chars ending in a single ellipsis (no re-flattening before the cut).
+        var longDescription = "Line one &amp; two<br/>" + new string('x', 5000);
+        var longPost = MakePost(description: longDescription);
+
+        var truncated = Parse(DiscordPayloadBuilder.BuildPayload(longPost, MakeConfig(), DiscordMode.Embed))
+            .GetProperty("embeds")[0].GetProperty("description").GetString()!;
+
+        Assert.Equal(4096, truncated.Length);
+        Assert.EndsWith("…", truncated);
     }
 
     [Fact]

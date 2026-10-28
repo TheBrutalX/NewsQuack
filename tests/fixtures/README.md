@@ -13,6 +13,7 @@ hard-coding paths.
 | File | Format | Purpose / encoded content |
 |---|---|---|
 | `rss2.xml` | RSS 2.0 | Channel with title/link/description/language; 4 items with title, link, guid and RFC 822 `pubDate` in US/Pacific (PDT, `-0700`) — including one near-midnight local time (`00:05`). Descriptions contain HTML entities and inline `<img>` tags; authors come from the `dc:creator` namespace. |
+| `rss2-multiline-desc.xml` | RSS 2.0 | One item whose `<description>` is the canonical cvefeed.io sample (T-055): labelled sections separated by `<br />` tags and literal newlines, XML-escaped exactly as a real feed carries them. Pins line-structure preservation through the real parse path. |
 | `atom.xml` | Atom | 4 entries with title, link href, id, and explicit UTC offsets in **both** `Z` and `+02:00` forms (feed-level and entry-level). `content type="html"` with entities; feed- and entry-level author name/uri. |
 | `youtube.xml` | YouTube channel RSS | The exact shape YouTube serves: `xmlns:yt`, per-item `<media:group>` with `<media:title>`, `<media:description>`, `<media:community><media:statistics views=...>`, `<media:thumbnail url=...>`, UTC (`+0000`) pubDate, `tag:youtube.com` GUIDs and `yt:videoId`. 3 entries. |
 | `reddit.xml` | Reddit subreddit Atom (the variant Reddit serves at `/r/<sub>/feed`) | Reddit-specific ids (`t5_…`/`t3_…`), `<category>` tags, authors as `/u/name`, alternate + replies links to the post/comment pages, millisecond-precision Zulu dates. 3 entries. |

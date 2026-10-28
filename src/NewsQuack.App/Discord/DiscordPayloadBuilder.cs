@@ -64,8 +64,8 @@ public static class DiscordPayloadBuilder
     {
         // Amended template (T-020 frozen, T-052 amendment, T-053 refinement): **<title>**\n<link>\n\n<plain-text description>\n\n<effective image url>\n\nFeed: <sourceName or sourceUrl> —
         // each previously-optional part is still omitted entirely when absent; the feed section is always present (the label is the feed's display
-        // name when non-blank, else the required Post.SourceUrl). PlainText collapses every whitespace run to a single space, so the assembled string can never contain 3+ consecutive
-        // newlines (the template's own \n\n separators are the only line breaks). Title and description are truncated to their embed limits
+        // name when non-blank, else the required Post.SourceUrl). PlainText preserves line structure but normalises it (per-line collapse + trim, at most one blank
+        // line internally), so the assembled string still never contains 3+ consecutive newlines. Title and description are truncated to their embed limits
         // before assembly so no part ever exceeds its limit in any mode.
         var markdown = new StringBuilder();
 
@@ -155,11 +155,12 @@ public static class DiscordPayloadBuilder
     private static string? EffectiveImage(Post post, DiscordTargetConfig config)
         => !string.IsNullOrWhiteSpace(post.ImageUrl) ? post.ImageUrl : config.FallbackImageUrl;
 
-    /// <summary>Shared HTML → plain-text helper used by every mode so stripping behavior is coherent across them: removes tags
-    /// (replaced with a space so adjacent words do not merge), decodes common entities and numeric character references, then
-    /// collapses all whitespace runs to a single space. Returns null when the result is empty. T-013: the logic now lives in the
-    /// shared <see cref="HtmlPlainText"/> helper used by every post builder — this public entry point delegates to it, keeping its
-    /// signature and behavior unchanged (no double-decoding regression on already-decoded text).</summary>
+    /// <summary>Shared HTML → plain-text helper used by every mode so stripping behavior is coherent across them: turns
+    /// <c>&lt;br&gt;</c> variants into newlines, removes tags (replaced with a space so adjacent words do not merge), decodes common
+    /// entities and numeric character references, then preserves line structure (per-line whitespace collapse + trim, 3+ consecutive
+    /// newlines → one blank line). Returns null when the result is empty. T-013: the logic now lives in the shared
+    /// <see cref="HtmlPlainText"/> helper used by every post builder — this public entry point delegates to it, keeping its signature
+    /// and behavior unchanged (no double-decoding regression on already-decoded text).</summary>
     public static string? PlainText(string? html) => HtmlPlainText.Decode(html);
 
     /// <summary>Truncates to exactly <paramref name="limit"/> characters with a single trailing ellipsis when cutting; returns the
