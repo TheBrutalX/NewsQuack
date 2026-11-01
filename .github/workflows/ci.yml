@@ -100,4 +100,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ toLower(github.repository_owner) }}/newsquack:${{ github.ref_name }}
+            ghcr.io/thebrutalx/newsquack:${{ github.ref_name }}
