@@ -11,7 +11,10 @@ namespace NewsQuack.App.Http;
 /// with a non-empty Location: resolve to an absolute URI, validate it, follow — up to <see cref="MaxRedirects"/> redirects total
 /// (MaxAutomaticRedirections = 3 semantics: the final non-redirect response may be reached after at most 3 redirects); a 4th
 /// redirect fails with an HttpRequestException naming "too many redirects". A failed hop also throws HttpRequestException naming
-/// the offending location. Stateless per request except local loop variables — one instance can safely serve all three named clients.
+/// the offending location. The FIRST request of a loop is never validated by design (T-058): every initial URL in v1.0 is operator-trusted
+/// and boot-validated (feeds/images via HttpUrlAttribute, webhook via DiscordWebhookUrlAttribute) — only redirect hops are. An https→http
+/// downgrade on a hop logs a Warning but is never rejected: the security property is the private-network block; a feed may legitimately
+/// redirect to an internal http mirror. Stateless per request except local loop variables — one instance can safely serve all three named clients.
 /// </summary>
 public sealed class SsrfSafeHttpHandler : DelegatingHandler
 {
@@ -76,6 +79,11 @@ public sealed class SsrfSafeHttpHandler : DelegatingHandler
                 throw new HttpRequestException($"Too many redirects: more than {MaxRedirects} hops while following a redirect to {location}.");
             }
 
+            // T-058: an https→http downgrade is observable but never rejected (log only) — same-scheme hops log nothing.
+            // ! safe: HttpClient assigns an absolute RequestUri before any handler runs (PrepareRequestMessage) — same invariant as above.
+            if (current.RequestUri!.Scheme == Uri.UriSchemeHttps && location.Scheme == Uri.UriSchemeHttp)
+                _logger.LogWarning("Redirect hop {Hop} downgrades TLS: {From} -> {To}", redirectsFollowed, current.RequestUri, location);
+
             var rejection = await ValidateLocationAsync(location, cancellationToken).ConfigureAwait(false);
             if (rejection is not null)
             {
@@ -99,8 +107,9 @@ public sealed class SsrfSafeHttpHandler : DelegatingHandler
         }
     }
 
-    /// <summary>Per-hop validation: scheme must be http/https and the host non-empty. When the anti-SSRF switch is on, the target must not be
-    /// loopback, link-local, or private — IP literals are checked directly, DNS names are resolved (all addresses) and rejected if ANY resolved
+    /// <summary>Per-hop validation of REDIRECT HOPS only — the first request is intentionally not validated (operator-trusted URL, boot-validated;
+    /// see the class docs). Scheme must be http/https and the host non-empty. When the anti-SSRF switch is on, the target must not be
+    /// unspecified, loopback, link-local, or private — IP literals are checked directly, DNS names are resolved (all addresses) and rejected if ANY resolved
     /// address is in a blocked range. Returns null when the hop is allowed, otherwise the human-readable reason (used in log + exception).</summary>
     private async Task<string?> ValidateLocationAsync(Uri location, CancellationToken cancellationToken)
     {

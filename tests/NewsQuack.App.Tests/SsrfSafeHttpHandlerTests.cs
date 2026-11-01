@@ -4,6 +4,7 @@ using System.Text;
 using NewsQuack.App.Configuration;
 using NewsQuack.App.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
 using WireMock.Server;
@@ -106,7 +107,7 @@ public class SsrfSafeHttpHandlerTests
     [Fact]
     public async Task Redirect_BlockPrivateOff_ToLoopbackIp_Allowed()
     {
-        using var host = Host.Create(blockPrivateNetworkRedirects: false);   // switch off (the schema default) → no address check at all
+        using var host = Host.Create(blockPrivateNetworkRedirects: false);   // switch off → no address check at all (T-058: false is no longer the schema default)
 
         host.Server.Given(Request.Create().WithPath("/a")).RespondWith(Response.Create().WithStatusCode(302).WithHeader("Location", $"http://127.0.0.1:{host.Server.Port}/loopback"));
         host.Server.Given(Request.Create().WithPath("/loopback")).RespondWith(Response.Create().WithStatusCode(200).WithBody("loopback-body"));
@@ -129,6 +130,110 @@ public class SsrfSafeHttpHandlerTests
 
         Assert.Contains("localhost", ex.Message);   // "localhost" resolves to loopback — the DNS name is checked via its resolved addresses
     }
+
+    [Fact]
+    public async Task RedirectTo_UnspecifiedIpv4_FlagOn_Rejected()
+    {
+        using var host = Host.Create(blockPrivateNetworkRedirects: true);
+
+        // T-058: INADDR_ANY (all-zero IPv4) is in the blocklist — rejected by validation before hop 2 is sent.
+        host.Server.Given(Request.Create().WithPath("/a")).RespondWith(Response.Create().WithStatusCode(302).WithHeader("Location", $"http://{IPAddress.Any}:{host.Server.Port}/x"));
+        host.Server.Given(Request.Create().WithPath("/x")).RespondWith(Response.Create().WithStatusCode(200).WithBody("should-not-arrive"));
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => host.Client.GetAsync($"{host.BaseUrl}/a"));
+
+        Assert.Contains(IPAddress.Any.ToString(), ex.Message);           // the exception names the blocked address…
+        Assert.Contains("blocked private-network range", ex.Message);    // …as a validation rejection, not a connect failure
+        Assert.Single(host.Server.LogEntries);                           // rejected before following — no second request was sent
+
+        // Flag off — validation lets the unspecified address through (no SSRF rejection) and the hop is followed; it then fails only in .NET's own
+        // socket layer, which refuses to connect to an unspecified target (Dns literal check, stable since corefx #37734). A non-.NET client
+        // following the same Location would reach loopback on Linux — exactly the bypass this task closes.
+        using var hostOff = Host.Create(blockPrivateNetworkRedirects: false);
+
+        hostOff.Server.Given(Request.Create().WithPath("/a")).RespondWith(Response.Create().WithStatusCode(302).WithHeader("Location", $"http://{IPAddress.Any}:{hostOff.Server.Port}/x"));
+        hostOff.Server.Given(Request.Create().WithPath("/x")).RespondWith(Response.Create().WithStatusCode(200).WithBody("loopback-arrived"));
+
+        var exOff = await Assert.ThrowsAsync<HttpRequestException>(() => hostOff.Client.GetAsync($"{hostOff.BaseUrl}/a"));
+
+        Assert.DoesNotContain("rejected", exOff.Message);            // not our SSRF rejection — validation let the hop through…
+        Assert.Contains("unspecified addresses", exOff.Message);     // …it is .NET's own connect-level refusal of the unspecified target
+    }
+
+    [Fact]
+    public async Task Redirect_DefaultHttpSectionConfig_ToPrivateIpLiteral_Rejected()
+    {
+        // T-058 default flip: a client built from `new HttpSectionConfig()` (no explicit key) blocks private-network redirects by default.
+        using var host = Host.Create(new HttpSectionConfig());
+
+        const string target = "http://10.255.255.1/feed.xml";   // 10/8 — validation-only, no live listener needed (rejected before hop 2 is sent); no explicit port: Uri renders default ports away
+        host.Server.Given(Request.Create().WithPath("/a")).RespondWith(Response.Create().WithStatusCode(302).WithHeader("Location", target));
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => host.Client.GetAsync($"{host.BaseUrl}/a"));
+
+        Assert.Contains(target, ex.Message);                          // the offending location is named…
+        Assert.Contains("blocked private-network range", ex.Message); // …as a validation rejection — the schema default is on
+    }
+
+    [Fact]
+    public async Task Redirect_HttpsToHttp_LogsDowngradeWarning()
+    {
+        using var httpsOrigin = WireMockServer.Start(useSSL: true);   // self-signed cert (Kestrel default) — TlsHandler accepts any cert
+        using var httpTarget = WireMockServer.Start();
+
+        httpsOrigin.Given(Request.Create().WithPath("/a")).RespondWith(Response.Create().WithStatusCode(302).WithHeader("Location", $"{httpTarget.Url}/b"));
+        httpTarget.Given(Request.Create().WithPath("/b")).RespondWith(Response.Create().WithStatusCode(200).WithBody("downgraded-body"));
+
+        var capture = new LogCapture();
+        using var handler = TlsHandler(capture);
+        using var client = new HttpClient(handler);
+
+        using var response = await client.GetAsync($"{httpsOrigin.Url}/a");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("downgraded-body", await response.Content.ReadAsStringAsync());   // the downgrade hop was followed — never rejected…
+
+        var warning = Assert.Single(capture.Snapshot(), e => e.Level == LogLevel.Warning);   // …and logged exactly once…
+        Assert.Contains($"{httpsOrigin.Url}/a", warning.Message);                              // …naming both URLs (from → to)
+        Assert.Contains($"{httpTarget.Url}/b", warning.Message);
+    }
+
+    [Fact]
+    public async Task Redirect_HttpToHttp_NoDowngradeWarning()
+    {
+        var capture = new LogCapture();
+        using var host = Host.Create(blockPrivateNetworkRedirects: false, logCapture: capture);
+
+        host.Server.Given(Request.Create().WithPath("/a")).RespondWith(Response.Create().WithStatusCode(302).WithHeader("Location", "/b"));
+        host.Server.Given(Request.Create().WithPath("/b")).RespondWith(Response.Create().WithStatusCode(200).WithBody("ok"));
+
+        using var response = await host.Client.GetAsync($"{host.BaseUrl}/a");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(0, capture.CountAt(LogLevel.Warning));   // same-scheme hop — no downgrade warning (no noise on redirecting feeds)
+    }
+
+    [Fact]
+    public async Task Redirect_HttpsToHttps_NoDowngradeWarning()
+    {
+        using var server = WireMockServer.Start(useSSL: true);
+
+        server.Given(Request.Create().WithPath("/a")).RespondWith(Response.Create().WithStatusCode(302).WithHeader("Location", "/b"));   // relative — stays on the https origin
+        server.Given(Request.Create().WithPath("/b")).RespondWith(Response.Create().WithStatusCode(200).WithBody("still-secure"));
+
+        var capture = new LogCapture();
+        using var handler = TlsHandler(capture);
+        using var client = new HttpClient(handler);
+
+        using var response = await client.GetAsync($"{server.Url}/a");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(0, capture.CountAt(LogLevel.Warning));   // same-scheme hop — no downgrade warning
+    }
+
+    /// <summary>The handler exactly as the production wiring builds it, except with a cert-accepting inner handler: the DI path has no hook for TLS settings, and these tests need a real https origin (self-signed WireMock cert).</summary>
+    private static SsrfSafeHttpHandler TlsHandler(LogCapture capture) =>
+        new(false, new HttpClientHandler { AllowAutoRedirect = false, ServerCertificateCustomValidationCallback = (_, _, _, _) => true }, capture.For<SsrfSafeHttpHandler>());
 
     [Fact]
     public async Task Gzip_ResponseWithContentEncodingGzip_BodyDecompressedTransparently()
@@ -164,12 +269,18 @@ public class SsrfSafeHttpHandlerTests
             _services = services;
         }
 
-        public static Host Create(bool blockPrivateNetworkRedirects = false)
+        public static Host Create(bool blockPrivateNetworkRedirects = false, LogCapture? logCapture = null)
+            => Create(new HttpSectionConfig { BlockPrivateNetworkRedirects = blockPrivateNetworkRedirects }, logCapture);
+
+        /// <summary>Build with the given section — pass `new HttpSectionConfig()` (no explicit key) to pin the schema defaults (T-058: private-network redirect block on by default).</summary>
+        public static Host Create(HttpSectionConfig config, LogCapture? logCapture = null)
         {
             var server = WireMockServer.Start();   // dynamic free port — no fixed binding
 
             var services = new ServiceCollection();
-            services.AddNewsQuackHttpClients(new HttpSectionConfig { BlockPrivateNetworkRedirects = blockPrivateNetworkRedirects });
+            services.AddNewsQuackHttpClients(config);
+            if (logCapture is not null)
+                services.AddSingleton(logCapture.For<SsrfSafeHttpHandler>());   // the shared handler resolves its logger from DI at first client creation
             var provider = services.BuildServiceProvider();
 
             return new Host(server, provider.GetRequiredService<IHttpClientFactory>().CreateClient("feed"), provider);

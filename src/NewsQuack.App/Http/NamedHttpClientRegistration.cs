@@ -28,7 +28,7 @@ public static class NamedHttpClientRegistration
 
     public const string ImageClientName = "image";
 
-    /// <summary>Registers the three named clients. A null section falls back to the schema defaults (30/15/15 s, no private-network blocking) —
+    /// <summary>Registers the three named clients. A null section falls back to the schema defaults (30/15/15 s, private-network redirect blocking on by default since T-058) —
     /// same pattern as Program's health section; boot validation already guarantees any present values are sane.</summary>
     public static IServiceCollection AddNewsQuackHttpClients(this IServiceCollection services, HttpSectionConfig? http)
     {

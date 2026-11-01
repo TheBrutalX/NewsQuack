@@ -40,4 +40,12 @@ public class SsrfValidationTests
     [InlineData("fdff::abcd", true)]           // top of fc00::/7
     public void SsrfValidation_IpLiteralsAndRanges_ClassifiedCorrectly(string address, bool expectedBlocked)
         => Assert.Equal(expectedBlocked, SsrfValidation.IsBlockedAddress(IPAddress.Parse(address)));
+
+    [Fact]
+    public void IsBlockedAddress_0Dot0Dot0Dot0_Blocked()
+        => Assert.True(SsrfValidation.IsBlockedAddress(IPAddress.Any));   // T-058: unspecified IPv4 (INADDR_ANY) — on Linux connect() to it reaches loopback
+
+    [Fact]
+    public void IsBlockedAddress_IPv6Any_Blocked()
+        => Assert.True(SsrfValidation.IsBlockedAddress(IPAddress.IPv6Any));   // T-058: unspecified IPv6 (::) — the same bypass in 16-byte form
 }

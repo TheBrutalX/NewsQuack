@@ -49,7 +49,7 @@ public class ConfigLoaderTests
         Assert.Equal(30, http.FeedTimeoutSeconds);
         Assert.Equal(15, http.DiscordTimeoutSeconds);
         Assert.Equal(15, http.ImageTimeoutSeconds);
-        Assert.False(http.BlockPrivateNetworkRedirects);
+        Assert.True(http.BlockPrivateNetworkRedirects);   // T-058: the anti-SSRF redirect block is on by default (schema default flipped to true)
 
         var health = Require(result.Config?.Health);
         Assert.True(health.Enabled);

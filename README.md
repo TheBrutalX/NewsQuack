@@ -57,7 +57,7 @@ Every value of the v2 config schema can be overridden from an environment variab
 | `NEWSQUACK_HTTP__FEEDTIMEOUTSECONDS` | `Http.FeedTimeoutSeconds` — feed fetch timeout in seconds (> 0) | 30 |
 | `NEWSQUACK_HTTP__DISCORDTIMEOUTSECONDS` | `Http.DiscordTimeoutSeconds` — Discord send timeout in seconds (> 0) | 15 |
 | `NEWSQUACK_HTTP__IMAGETIMEOUTSECONDS` | `Http.ImageTimeoutSeconds` — image fetch timeout in seconds (> 0) | 15 |
-| `NEWSQUACK_HTTP__BLOCKPRIVATENETWORKREDIRECTS` | `Http.BlockPrivateNetworkRedirects` — anti-SSRF switch (`true`/`false`) | false |
+| `NEWSQUACK_HTTP__BLOCKPRIVATENETWORKREDIRECTS` | `Http.BlockPrivateNetworkRedirects` — anti-SSRF switch (`true`/`false`) | true |
 | `NEWSQUACK_HEALTH__ENABLED` | `Health.Enabled` — health endpoint on/off (`true`/`false`) | true |
 | `NEWSQUACK_HEALTH__PORT` | `Health.Port` — health endpoint TCP port (1..65535) | 8081 |
 | `NEWSQUACK_LOGGING__LEVEL` | `Logging.Level` — `Trace` / `Debug` / `Information` / `Warning` / `Error` / `Critical` (case-insensitive) | Information |

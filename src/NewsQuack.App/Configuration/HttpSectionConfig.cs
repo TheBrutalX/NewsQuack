@@ -17,6 +17,7 @@ public sealed class HttpSectionConfig
     [Range(1, int.MaxValue)]
     public int ImageTimeoutSeconds { get; init; } = 15;
 
-    /// <summary>Anti-SSRF switch consumed by the HTTP layer later. Default false.</summary>
-    public bool BlockPrivateNetworkRedirects { get; init; }
+    /// <summary>Anti-SSRF switch consumed by the HTTP layer later. Default true (OWASP A10, issue #76): redirect hops to loopback/link-local/private
+    /// addresses are rejected unless explicitly disabled — feeds that legitimately redirect into private networks opt out with `false`.</summary>
+    public bool BlockPrivateNetworkRedirects { get; init; } = true;
 }
