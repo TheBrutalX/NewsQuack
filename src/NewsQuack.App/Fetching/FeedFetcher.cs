@@ -19,11 +19,16 @@ public sealed class FeedFetcher : IFeedFetcher
     /// <summary>robots.txt bodies larger than this many bytes are not parsed — fail open with a Warning (coordinator decision, "e.g. 1 MB").</summary>
     public const int MaxRobotsBytes = 1024 * 1024;
 
+    /// <summary>Feed bodies larger than this many bytes are not parsed — the fetch fails with a visible TransportError (OWASP A08, issue #75).
+    /// Generous for real feeds (typical RSS/Atom is well under 1 MiB; YouTube channel RSS a few hundred KB); bounds worst-case memory per in-flight response.</summary>
+    public const int MaxFeedBytes = 8 * 1024 * 1024;
+
     private readonly HttpClient _http;
     private readonly GlobalHttpThrottle _throttle;
     private readonly List<string?> _userAgents;   // the validated cascade in retry order; a single null entry when no candidate survived validation
     private readonly UaCache _uaCache;
     private readonly ConcurrentDictionary<string, bool> _robotsAllowedByOrigin = new(StringComparer.OrdinalIgnoreCase);   // origin → allowed, process lifetime (origins are few)
+    private readonly ConcurrentDictionary<string, byte> _nonTlsWarnedUrls = new();   // lowercased absolute URL → warned exactly once, process lifetime (A02, issue #75 — URLs are few per instance set)
     private readonly ILogger<FeedFetcher> _logger;
 
     public FeedFetcher(IHttpClientFactory httpFactory, GlobalHttpThrottle throttle, UserAgentResolver userAgentResolver, UaCache? uaCache = null, ILogger<FeedFetcher>? logger = null)
@@ -58,6 +63,11 @@ public sealed class FeedFetcher : IFeedFetcher
             return new FeedFetchResult(FetchStatus.TransportError, Error: $"scheme '{uri.Scheme}' must be http or https");
         }
 
+        // A02 (issue #75): plaintext-HTTP feeds are visible in the log — exactly once per distinct URL per process lifetime, before the request,
+        // regardless of the fetch outcome. https never warns.
+        if (uri.Scheme == "http" && _nonTlsWarnedUrls.TryAdd(uri.AbsoluteUri.ToLowerInvariant(), 0))
+            _logger.LogWarning("Feed {FeedUrl} is fetched over plaintext HTTP — content is not encrypted in transit", feedUrl);
+
         if (!await IsAllowedByRobotsAsync(uri, ct).ConfigureAwait(false))
             return new FeedFetchResult(FetchStatus.RobotsBlocked, Error: "feed path is disallowed by robots.txt");
 
@@ -85,9 +95,24 @@ public sealed class FeedFetcher : IFeedFetcher
 
                 CacheWinnerIfNew(urlKey, userAgent, i);
 
-                mapped = response.IsSuccessStatusCode
-                    ? new FeedFetchResult(FetchStatus.Ok, Content: await ReadUtf8Async(response.Content, ct).ConfigureAwait(false), StatusCode: lastStatus)
-                    : new FeedFetchResult(FetchStatus.HttpError, StatusCode: lastStatus, Error: $"HTTP {lastStatus}");
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await ReadCappedAsync(response.Content, MaxFeedBytes, ct).ConfigureAwait(false);
+
+                    if (content is null)   // body LONGER than the cap — the capped read already stopped at MaxFeedBytes+1 bytes: a hostile multi-GB answer cannot OOM the container
+                    {
+                        _logger.LogWarning("Feed body for {FeedUrl} exceeds {MaxBytes} bytes — not parsed", urlKey, MaxFeedBytes);
+                        mapped = new FeedFetchResult(FetchStatus.TransportError, StatusCode: lastStatus, Error: $"body exceeds {MaxFeedBytes} bytes");
+                    }
+                    else   // at/under the cap (exactly MaxFeedBytes is still Ok) — explicit UTF-8 decode preserved by ReadCappedAsync
+                    {
+                        mapped = new FeedFetchResult(FetchStatus.Ok, Content: content, StatusCode: lastStatus);
+                    }
+                }
+                else
+                {
+                    mapped = new FeedFetchResult(FetchStatus.HttpError, StatusCode: lastStatus, Error: $"HTTP {lastStatus}");
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -216,16 +241,9 @@ public sealed class FeedFetcher : IFeedFetcher
         _logger.LogInformation("Cached User-Agent winner '{UserAgent}' (candidate {Index}) for feed {FeedUrl}", userAgent, index + 1, urlKey);
     }
 
-    /// <summary>The body as UTF-8 text — bytes are decoded explicitly: ReadAsStringAsync would fall back to ISO-8859-1 when the Content-Type
-    /// carries no charset, and feeds must come out as UTF-8 (coordinator decision).</summary>
-    private static async Task<string> ReadUtf8Async(HttpContent content, CancellationToken ct)
-    {
-        var bytes = await content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-        return Encoding.UTF8.GetString(bytes);
-    }
-
-    /// <summary>Reads the body as UTF-8 text up to <paramref name="maxBytes"/>; returns null when the body is longer (the caller fails open).
-    /// Reading stops at maxBytes+1 — a huge robots.txt never balloons memory.</summary>
+    /// <summary>Reads the body as UTF-8 text up to <paramref name="maxBytes"/>; returns null when the body is longer (the caller decides: fail open for
+    /// robots, TransportError for feeds — issue #75). Reading stops at maxBytes+1 — a huge body never balloons memory. The bytes are decoded explicitly as
+    /// UTF-8 (never ReadAsStringAsync): feeds must come out as UTF-8 even when the Content-Type carries no charset (coordinator decision).</summary>
     private static async Task<string?> ReadCappedAsync(HttpContent content, int maxBytes, CancellationToken ct)
     {
         await using var stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);

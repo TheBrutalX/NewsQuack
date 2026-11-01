@@ -20,6 +20,11 @@ public sealed class DiscordNotificationTarget : INotificationTarget
     /// timeout/redirect behavior; until then the default client settings apply (this target never sets timeouts on the instance).</summary>
     public const string HttpClientName = "discord";
 
+    /// <summary>Discord response bodies larger than this many bytes are truncated to this prefix — OWASP A08, issue #75. Discord's own responses are a few
+    /// hundred bytes; 64 KiB covers any realistic error body with room. The prefix is KEPT (unlike the robots pattern) so retry-after parsing / 400
+    /// inspection / error excerpts behave exactly as today on whatever arrived.</summary>
+    private const int MaxWebhookResponseBytes = 64 * 1024;
+
     private readonly HttpClient _http;
     private readonly DiscordTargetConfig _config;
     private readonly string _webhookUrl;
@@ -70,10 +75,15 @@ public sealed class DiscordNotificationTarget : INotificationTarget
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
             using var response = await _http.PostAsync(_webhookUrl, content, ct);
 
+            var (body, truncated) = await ReadCappedBodyAsync(response.Content, MaxWebhookResponseBytes, ct).ConfigureAwait(false);
+
+            if (truncated)   // over-cap: the truncated prefix is kept — retry-after parsing / 400 inspection / error excerpt continue on whatever arrived
+                _logger.LogWarning("Discord webhook response at {WebhookUrl} exceeds {MaxBytes} bytes — body truncated to the prefix", WebhookMasker.Mask(_webhookUrl), MaxWebhookResponseBytes);
+
             return new DiscordAttempt(
                 response.StatusCode,
-                await response.Content.ReadAsStringAsync(ct),   // body kept for retry-after parsing / 400 inspection / error excerpt
-                response.Headers.RetryAfter?.Delta,             // Retry-After header in seconds when present (date form → null → body)
+                body,                                                // body kept for retry-after parsing / 400 inspection / error excerpt (possibly a truncated prefix)
+                response.Headers.RetryAfter?.Delta,                  // Retry-After header in seconds when present (date form → null → body)
                 null);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -91,6 +101,37 @@ public sealed class DiscordNotificationTarget : INotificationTarget
             _logger.LogWarning(ex, "Discord webhook request failed: {WebhookUrl}", WebhookMasker.Mask(_webhookUrl));
             return new DiscordAttempt(null, string.Empty, null, $"transport failure: {ex.Message}");
         }
+    }
+
+    /// <summary>The response body as text, bounded to <paramref name="maxBytes"/> — reading stops at maxBytes+1 so "exactly at cap" stays distinguishable from
+    /// "over cap" (mirrors FeedFetcher's capped-read boundary), and the truncated PREFIX is kept rather than dropped: a 429 whose body is over cap still parses
+    /// whatever retry_after* key fits in the prefix (or none). Only the bound changes, never the decoding — see <see cref="BodyEncoding"/>.</summary>
+    private static async Task<(string Body, bool Truncated)> ReadCappedBodyAsync(HttpContent content, int maxBytes, CancellationToken ct)
+    {
+        await using var stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+
+        var buffer = new byte[maxBytes + 1];   // +1 so a body of exactly maxBytes is not reported truncated
+        var total = 0;
+
+        while (total < buffer.Length)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(total), ct).ConfigureAwait(false);
+            if (read == 0) break;
+            total += read;
+        }
+
+        var kept = Math.Min(total, maxBytes);   // the truncated prefix when the body was longer — never null here (unlike the robots pattern)
+        return (BodyEncoding(content).GetString(buffer, 0, kept), total > maxBytes);
+    }
+
+    /// <summary>The encoding ReadAsStringAsync would have used for this content: the Content-Type's charset when present, else UTF-8 (.NET 10's default — verified
+    /// against this runtime; Discord answers application/json without a charset, so the no-charset path is the real one). Bounding the read must not change decoding.</summary>
+    private static Encoding BodyEncoding(HttpContent content)
+    {
+        var charset = content.Headers.ContentType?.Parameters
+            .FirstOrDefault(p => p.Name.Equals("charset", StringComparison.OrdinalIgnoreCase))?.Value;
+
+        return string.IsNullOrEmpty(charset) ? Encoding.UTF8 : Encoding.GetEncoding(charset);
     }
 
     /// <summary>Maps one attempt to a TargetResult. A transport failure/timeout is retryable without a hint; 204 → Delivered;

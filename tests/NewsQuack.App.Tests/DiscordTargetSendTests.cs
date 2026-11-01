@@ -81,6 +81,67 @@ public class DiscordTargetSendTests
     }
 
     [Fact]
+    public async Task DiscordTarget_WebhookResponseBodyLargerThanCap_RetryAfterStillParsedFromPrefix()
+    {
+        using var host = TestHost.Create();
+
+        // 429 whose body starts with a COMPLETE retry_after_ms object, padded with whitespace past the 64 KiB cap. JSON allows trailing whitespace after the
+        // root value, so the truncated PREFIX is still valid JSON and retry-after parses from it (a dangling comma would not survive strict parsing — the plan's
+        // "parses whatever key fits in the prefix (or none)"). No Retry-After header — the body is the only source.
+        const string head = """{"retry_after_ms":1500}""";
+        const int cap = 64 * 1024;   // DiscordNotificationTarget.MaxWebhookResponseBytes (private by design — constants, no config key)
+        var body = head + new string(' ', cap - head.Length + 128);   // total > cap → truncated at the cap…
+        Assert.True(Encoding.UTF8.GetByteCount(body) > cap);
+
+        host.Server.Given(Request.Create())
+              .RespondWith(Response.Create().WithStatusCode(429).WithHeader("Content-Type", "application/json").WithBody(Encoding.UTF8.GetBytes(body)));
+
+        var result = await host.Target.SendAsync(MakePost());   // no exception escapes — a truncated body is not a failure mode
+
+        Assert.Equal(TargetOutcome.Retryable, result.Outcome);
+        Assert.Equal(TimeSpan.FromMilliseconds(1500), result.RetryAfter);   // …and retry-after is still parsed from the truncated prefix (1.5 s visible at target level)
+        var warning = host.Logger.Messages.FirstOrDefault(m => m.StartsWith("Warning") && m.Contains("exceeds"));
+        Assert.NotNull(warning);                                             // the over-cap Warning must have been logged…
+        Assert.Contains(WebhookMasker.Mask(host.Server.Url)!, warning!);     // ! safe ×2: Mask only returns null for null input (server.Url is a live URL — WireMock contract), and the Assert.NotNull above guarantees warning — the MASKED URL is echoed
+    }
+
+    [Fact]
+    public async Task DiscordTarget_SmallWebhookBody_Unaffected()
+    {
+        // Regression: normal small 429/400 bodies behave exactly as pre-T-057 — same results, and no over-cap warning fires. (The 400 mapping itself stays
+        // pinned by the channel-type tests above.)
+
+        // Small 429 body → retry-after parsed as today.
+        {
+            using var host = TestHost.Create();
+
+            host.Server.Given(Request.Create())
+                  .RespondWith(Response.Create().WithStatusCode(429).WithHeader("Content-Type", "application/json").WithBody("""{"retry_after_ms":1500}"""));
+
+            var result = await host.Target.SendAsync(MakePost());
+
+            Assert.Equal(TargetOutcome.Retryable, result.Outcome);
+            Assert.Equal(TimeSpan.FromMilliseconds(1500), result.RetryAfter);   // small bodies behave exactly as today…
+            Assert.DoesNotContain("exceeds", string.Join("\n", host.Logger.Messages));   // …and no over-cap warning fires
+        }
+
+        // Small non-channel-type 400 body → permanent failure with the short excerpt, as today (channel-type 400 mapping stays pinned by the tests above).
+        {
+            using var host = TestHost.Create();
+
+            host.Server.Given(Request.Create())
+                  .RespondWith(Response.Create().WithStatusCode(400).WithHeader("Content-Type", "application/json").WithBody("""{"message":"Webhook token invalid"}"""));
+
+            var result = await host.Target.SendAsync(MakePost());
+
+            Assert.Equal(TargetOutcome.PermanentFailure, result.Outcome);
+            Assert.StartsWith("400:", result.Error!);   // ! safe: PermanentFailure always carries the formatted error (MapAttempt contract)
+            Assert.Contains("Webhook token invalid", result.Error);   // short body excerpt preserved…
+            Assert.DoesNotContain("exceeds", string.Join("\n", host.Logger.Messages));   // …with no over-cap warning
+        }
+    }
+
+    [Fact]
     public async Task Send_500_ReturnsRetryableWithoutRetryAfter()
     {
         using var host = TestHost.Create();
