@@ -12,9 +12,9 @@ Milestone M1 (v1.x) is fully implemented on the `sp/01` branch and is being rele
 
 | File | Who it's for |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | Development subagents — system overview, access model, working & code rules (binding summary) |
-| [`docs/PROCESS.md`](docs/PROCESS.md) | Everyone — branch model, task lifecycle, GitHub tracking, commit convention (full detail + rationale) |
-| [`docs/TASK-TEMPLATE.md`](docs/TASK-TEMPLATE.md) | Coordinator — template for planning every task in `tasks/` |
+| [`.github/AGENTS.md`](.github/AGENTS.md) | Development subagents — system overview, access model, working & code rules (binding summary) |
+| [`.github/docs/PROCESS.md`](.github/docs/PROCESS.md) | Everyone — branch model, task lifecycle, GitHub tracking, commit convention (full detail + rationale) |
+| [`.github/docs/TASK-TEMPLATE.md`](.github/docs/TASK-TEMPLATE.md) | Coordinator — template for planning every task in the local, unversioned `tasks/` folder |
 | [`.github/pull_request_template.md`](.github/pull_request_template.md) | Everyone — PR format (task, impact & risk, testing, checklist) |
 
 ## Example config file

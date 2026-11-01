@@ -40,14 +40,14 @@ For architectural details beyond this overview: refer to the task file assigned 
 
 A development subagent sees **exactly three** sources of truth:
 
-1. This `AGENTS.md`.
-2. Its own task file in `tasks/` (e.g. `tasks/t-024-post-pipeline-runner.md`).
+1. This file (`.github/AGENTS.md`).
+2. Its own task file, kept locally outside the repo (`/home/opencode/workspace/newsquack/tasks/`) and handed over by the coordinator (e.g. `t-024-post-pipeline-runner.md`).
 3. Git history and existing code (`git log`, `git show <commit>`, the working tree).
 
 It must **not know the future**:
 
-- do not read `docs/plan/` (PM-level planning: WBS, milestones, roadmap);
-- do not open other task files in `tasks/`;
+- do not read PM-level planning (WBS, milestones, roadmap);
+- do not open other task files in `/home/opencode/workspace/newsquack/tasks/`;
 - do not assume features, pipeline stages, targets or entities that are not in your own task;
 - if your task references a contract (`Post`, `IPostStage`, `IStateStore`, …), read its current definition in the code — contracts change only through an explicit decision recorded in a commit.
 
@@ -60,7 +60,7 @@ If something you need is missing from your task file, stop and ask the coordinat
 ## 3. Working rules
 
 - **One task at a time.** Never mix changes from two tasks in one branch or one commit.
-- Every task has a **plan + impact assessment + test plan** (see `docs/TASK-TEMPLATE.md`). If scope changed during implementation, update the task file in the same PR that changed the scope.
+- Every task has a **plan + impact assessment + test plan** (see `.github/docs/TASK-TEMPLATE.md`). If scope changed during implementation, update the local task file (outside Git) in the same change that changed the scope — `tasks/` is untracked, so there is no PR-visible copy.
 - **Commits follow Conventional Commits, always in English**, optional scope:
 
   ```
@@ -109,4 +109,4 @@ master  ←  sp/NN  ←  dev branches
 - `sp/01`, `sp/02`, … are **service pack** branches — one per milestone (iteration line v1.x, v2.x). An SP branch is created from `master` at the start of a milestone.
 - Dev branches are named `dev/<sp>-<task-id>-<slug>` (e.g. `dev/sp01-t-024-post-pipeline-runner`), always branched **from their own SP** and merged **back into their own SP** via PR. Never a dev branch directly to master, never cross-SP porting inside a milestone.
 
-Full rules, lifecycle and rationale: `docs/PROCESS.md`.
+Full rules, lifecycle and rationale: `.github/docs/PROCESS.md`.
