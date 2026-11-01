@@ -22,14 +22,14 @@ NewsQuack runs as a single Docker container in **multi-instance mode**: one conf
 
 ## Quick start (Docker)
 
-The image is published to Docker Hub as `thebrutalx/newsquack` (multi-arch: `linux/amd64`, `linux/arm64`), tagged per release — pin a versioned tag such as `v1.0`:
+The image is published to GitHub Container Registry as `ghcr.io/thebrutalx/newsquack` (multi-arch: `linux/amd64`, `linux/arm64`), tagged per release — pin a versioned tag such as `v1.0`. While the repository is private, the package is too: run `docker login ghcr.io` with a GitHub token that has read access to packages before pulling.
 
 ```bash
 docker run -d \
   --name newsquack \
   -v /host/path/newsquack.json:/config/newsquack.json \
   -v newsquack-data:/data \
-  thebrutalx/newsquack:v1.0
+  ghcr.io/thebrutalx/newsquack:v1.0
 ```
 
 - The config file is mounted at `/config/newsquack.json` — see [Configuration](#configuration) for a full example and the key reference. To keep the webhook URL out of the file, pass it in the environment instead: `-e NEWSQUACK_INSTANCES__0__DISCORD__WEBHOOKURL="https://discord.com/api/webhooks/…"` (env vars always win over the config file).
@@ -177,7 +177,7 @@ dotnet build NewsQuack.sln -c Release
 dotnet test
 ```
 
-CI additionally builds with warnings-as-errors and enforces per-project coverage thresholds on every pull request. The `Dockerfile` is a two-stage build (SDK image → ASP.NET runtime, running as a non-root user); the Docker Hub images are built from it.
+CI additionally builds with warnings-as-errors and enforces per-project coverage thresholds on every pull request. The `Dockerfile` is a two-stage build (SDK image → ASP.NET runtime, running as a non-root user); the container images published to GHCR are built from it.
 
 ## Contributing
 
