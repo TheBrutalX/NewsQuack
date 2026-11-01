@@ -11,6 +11,7 @@ COPY src/NewsQuack.Infrastructure/NewsQuack.Infrastructure.csproj src/NewsQuack.
 COPY src/NewsQuack.App/NewsQuack.App.csproj src/NewsQuack.App/
 COPY tests/NewsQuack.Core.Tests/NewsQuack.Core.Tests.csproj tests/NewsQuack.Core.Tests/
 COPY tests/NewsQuack.App.Tests/NewsQuack.App.Tests.csproj tests/NewsQuack.App.Tests/
+COPY tests/TzCellRunner/TzCellRunner.csproj tests/TzCellRunner/
 RUN dotnet restore NewsQuack.sln
 
 # Sources, then publish framework-dependent (self-contained off: the runtime image provides the shared framework).
