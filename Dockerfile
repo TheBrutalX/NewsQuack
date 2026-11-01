@@ -21,10 +21,6 @@ RUN dotnet publish src/NewsQuack.App -c Release -o /app/publish
 # aspnet image — dotnet/runtime does not contain the ASP.NET Core shared framework and the container would fail at startup.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
-# Dedicated non-root user (uid/gid 1001).
-RUN groupadd --gid 1001 app \
-    && useradd --uid 1001 --gid app --create-home app
-
 WORKDIR /app
 COPY --from=build /app/publish ./
 
@@ -32,6 +28,8 @@ COPY --from=build /app/publish ./
 RUN mkdir -p /data \
     && chown -R app:app /app /data
 
+# Non-root: use the `app` user built into the MCR image (uid/gid $APP_UID, consistent across all .NET images since .NET 8) —
+# creating our own would conflict with it.
 USER app
 
 ENTRYPOINT ["dotnet", "NewsQuack.App.dll"]
