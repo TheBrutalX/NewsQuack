@@ -1,4 +1,4 @@
-# T-045: multi-stage build for the NewsQuack service image (Docker Hub: thebrutalx/newsquack).
+# T-045: multi-stage build for the NewsQuack service image (GHCR: ghcr.io/thebrutalx/newsquack).
 # Build stage restores before copying sources so package restore stays layer-cached.
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
