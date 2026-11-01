@@ -76,6 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') # only on tag v* pushes
     permissions:
+      contents: read # job-level permissions replace the defaults — checkout of a private repo needs it
       packages: write # GITHUB_TOKEN pushes release images to GHCR; no repo secrets needed
     steps:
       - name: Checkout
