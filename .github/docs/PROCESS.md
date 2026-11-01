@@ -76,7 +76,7 @@ A task's plan may legitimately change in a later milestone (e.g. a v1.0 task rew
 
 | Subagent kind | Access | Why |
 |---|---|---|
-| **Analysis** (planning, review, investigation) | Full repo + `~/newsquack-analysis/` (original project analysis, PM plan, issues) | They must see the whole picture to plan and review correctly. |
+| **Analysis** (planning, review, investigation) | Full repo + `newsquack-analysis/` (local analysis folder next to the repository clone: project analysis, PM plan, issues) | They must see the whole picture to plan and review correctly. |
 | **Development** | Only: `.github/AGENTS.md` + its own task file (local, outside the repo — handed over by the coordinator) + git history & existing code (`git log`, `git show`) | Two reasons: **(1) no future-info leakage** — knowing what comes next (reserved pipeline slots, planned targets, later milestones) tempts a dev subagent to build for the future and bloat the diff; **(2) focused diffs** — with only its task in view, changes stay inside the task's impact radius, which is what makes small PRs reviewable and merge conflicts rare. |
 
 Consequences: contracts (`Post`, `IPostStage`, `INotificationTarget`, `IStateStore`, …) are read from **code**, not from planning docs; anything missing from a task file is a question to the coordinator, never an assumption.

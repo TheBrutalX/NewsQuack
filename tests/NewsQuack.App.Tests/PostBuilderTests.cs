@@ -9,7 +9,7 @@ namespace NewsQuack.App.Tests;
 /// <summary>
 /// T-013: tests of the per-platform IPostBuilder strategies — explicit selection by PostBuilderSelector (the only place in
 /// the app where a platform is chosen), platform behaviors pinned against the shared fixtures, coherent HTML decoding in all
-/// branches and nullable-safe mapping (the upstream upstream PR #97 class). T-012's FeedParserTests remain the unchanged
+/// branches and nullable-safe mapping (a nullable-safety regression class). T-012's FeedParserTests remain the unchanged
 /// behavior contract for the generic path.
 /// </summary>
 public class PostBuilderTests
@@ -251,7 +251,7 @@ public class PostBuilderTests
         Assert.All(result.Posts, p => Assert.Null(p.Description));
     }
 
-    // ── Nullable-safety (upstream upstream PR #97 class) ───────────────────────────────────────────────────────
+    // ── Nullable-safety (regression-pinned defect class) ──────────────────────────────────────────────────────
 
     [Fact]
     public void Build_ItemWithoutLink_BuildsPostWithNullLinkNoNre()

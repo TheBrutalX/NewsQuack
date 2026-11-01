@@ -34,7 +34,7 @@ internal sealed class ItemDropException(string reason) : Exception(reason)
 
 /// <summary>
 /// T-012: pure mapper from a <see cref="RawFeedItem"/> to a canonical <see cref="Post"/> (item data in ⇒ Post? out). Shared by both passes so their field extraction is identical. Throws <see cref="ItemDropException"/> for the droppable cases; every other fault propagates as an ordinary exception.
-/// T-013: this mapper IS the generic platform strategy — it implements <see cref="IPostBuilder"/>, and its mapping gained coherent HTML decoding of the description through the shared <see cref="HtmlPlainText"/> helper (with an optional plain-character limit, null in v1.0). Everything else is byte-identical to T-012: title required, date rules via FeedDateParser, link resolution, ItemId derivation guid→link→SHA-256 — and no NRE on any null optional field (the upstream upstream PR #97 class).
+/// T-013: this mapper IS the generic platform strategy — it implements <see cref="IPostBuilder"/>, and its mapping gained coherent HTML decoding of the description through the shared <see cref="HtmlPlainText"/> helper (with an optional plain-character limit, null in v1.0). Everything else is byte-identical to T-012: title required, date rules via FeedDateParser, link resolution, ItemId derivation guid→link→SHA-256 — and no NRE on any null optional field (a regression-pinned nullable-safety defect class).
 /// </summary>
 internal sealed class FeedItemMapper : IPostBuilder
 {
