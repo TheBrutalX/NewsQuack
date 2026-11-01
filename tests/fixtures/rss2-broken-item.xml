@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Broken-item variant of rss2.xml: exactly ONE item (the third) is malformed — it has no <title>.
+     All other items are valid and parseable; the document itself is well-formed XML. -->
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Daily Tech Briefing</title>
+    <link>https://example.com/blog</link>
+    <description>A sample RSS 2.0 feed with HTML entities and inline images in descriptions.</description>
+    <language>en-us</language>
+    <lastBuildDate>Tue, 21 Oct 2025 16:42:10 -0700</lastBuildDate>
+    <item>
+      <title>New compiler release &amp; performance notes</title>
+      <link>https://example.com/blog/compiler-release</link>
+      <guid isPermaLink="true">https://example.com/blog/compiler-release</guid>
+      <pubDate>Tue, 21 Oct 2025 16:42:10 -0700</pubDate>
+      <dc:creator>Alice Nguyen</dc:creator>
+      <description>The new release &lt;b&gt;cuts build times by 30%&lt;/b&gt; &amp; fixes a regression in the optimizer.</description>
+    </item>
+    <item>
+      <title>A practical guide to RSS validation</title>
+      <link>https://example.com/blog/rss-validation</link>
+      <guid isPermaLink="true">https://example.com/blog/rss-validation</guid>
+      <pubDate>Tue, 21 Oct 2025 09:15:44 -0700</pubDate>
+      <dc:creator>Alice Nguyen</dc:creator>
+      <description>What &lt;code&gt;&amp;lt;guid isPermaLink=&quot;true&quot;&amp;gt;&lt;/code&gt; actually means and how to validate feeds before parsing them.</description>
+    </item>
+    <item>
+      <!-- DEFECT: this item has no <title> — a parser must drop exactly this one item. -->
+      <link>https://example.com/blog/item-without-title</link>
+      <guid isPermaLink="true">https://example.com/blog/item-without-title</guid>
+      <pubDate>Tue, 21 Oct 2025 00:05:12 -0700</pubDate>
+      <dc:creator>Bob Fischer</dc:creator>
+      <description>This item is missing its title element on purpose.</description>
+    </item>
+    <item>
+      <title>Community call: Q&amp;A on feed deduplication</title>
+      <link>https://example.com/blog/community-call-dedup</link>
+      <guid isPermaLink="true">https://example.com/blog/community-call-dedup</guid>
+      <pubDate>Mon, 20 Oct 2025 18:30:00 -0700</pubDate>
+      <dc:creator>Carol Diaz</dc:creator>
+      <description>Join us &amp; ask anything about item IDs, GUIDs &amp; at-least-once delivery.</description>
+    </item>
+  </channel>
+</rss>

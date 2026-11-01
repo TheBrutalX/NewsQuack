@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Broken-date variant of atom.xml: exactly ONE entry (the second) has an unparseable date —
+     <updated>not-a-date</updated> with no <published>. All other entries carry valid dates;
+     the document itself is well-formed XML. -->
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Open Source Weekly</title>
+  <link href="https://example.org/blog" rel="alternate" type="text/html"/>
+  <id>urn:uuid:9f1c6a4e-7d2b-4e8a-b3c5-6a0d1e2f3b4c</id>
+  <updated>2025-10-21T14:30:00Z</updated>
+  <author>
+    <name>Maria Weber</name>
+    <uri>https://example.org/maria</uri>
+  </author>
+  <entry>
+    <title>Shipping &amp; testing in parallel</title>
+    <link href="https://example.org/blog/shipping-testing" rel="alternate" type="text/html"/>
+    <id>urn:uuid:1a2b3c4d-0001-4f5e-9a8b-7c6d5e4f3a2b</id>
+    <published>2025-10-21T14:30:00Z</published>
+    <updated>2025-10-21T14:30:00Z</updated>
+    <content type="html">&lt;p&gt;CI pipelines that &lt;b&gt;ship and test in parallel&lt;/b&gt; cut lead time.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>The entry with the broken clock</title>
+    <link href="https://example.org/blog/broken-clock" rel="alternate" type="text/html"/>
+    <id>urn:uuid:1a2b3c4d-0002-4f5e-9a8b-7c6d5e4f3a2b</id>
+    <!-- DEFECT: unparseable date and no <published> — a parser must drop exactly this one entry. -->
+    <updated>not-a-date</updated>
+    <content type="html">&lt;p&gt;This entry's date cannot be parsed on purpose.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>Migrating a legacy parser without downtime</title>
+    <link href="https://example.org/blog/parser-migration" rel="alternate" type="text/html"/>
+    <id>urn:uuid:1a2b3c4d-0003-4f5e-9a8b-7c6d5e4f3a2b</id>
+    <published>2025-10-21T13:58:12+02:00</published>
+    <updated>2025-10-21T13:58:12+02:00</updated>
+    <content type="html">&lt;p&gt;A &lt;code&gt;dual-read&lt;/code&gt; strategy keeps the migration safe.&lt;/p&gt;</content>
+  </entry>
+</feed>

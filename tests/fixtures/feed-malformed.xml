@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Malformed feed: the document is truncated mid-tag (no closing elements at all) —
+     100% unusable, represents a fully broken feed. Must NOT parse as XML. -->
+<rss version="2.0">
+  <channel>
+    <title>Daily Tech Briefing</title>
+    <item>
+      <title>New compiler releas

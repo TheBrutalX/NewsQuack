@@ -7,7 +7,7 @@
 
 ## 1. What this system is
 
-Newsquack is a self-hosted **.NET 10** service that polls RSS/Atom feeds and YouTube channels and delivers every new post to **pluggable notification targets**. It is an improved reimplementation of NewsQuack. Discord (webhook: embed / forum / markdown) is the only target in v1.0; Telegram, Slack, Rocket Chat and generic webhooks are planned for later releases. It runs as a single Docker container in **multi-instance mode**: one config file describes N instances, each with its own feeds, check interval and webhook URL.
+NewsQuack is a self-hosted **.NET 10** service that polls RSS/Atom feeds and YouTube channels and delivers every new post to **pluggable notification targets**. Discord (webhook: embed / forum / markdown) is the only target in v1.0; Telegram, Slack, Rocket Chat and generic webhooks are planned for later releases. It runs as a single Docker container in **multi-instance mode**: one config file describes N instances, each with its own feeds, check interval and webhook URL.
 
 How a post flows through the system:
 
@@ -17,7 +17,7 @@ How a post flows through the system:
 
    | Order | Stage | Notes |
    |---|---|---|
-   | 10 | dedup check | item-ID already delivered → `ctx.Skip = true`, no further work on this item |
+   | 10 | dedup check | item-ID already delivered or pending (in-flight) → `ctx.Skip = true`, no further work on this item |
    | 20 | filters (negative / regex / time range) | reserved slot, v2.0 — do not add a stage here in v1.0 tasks unless your task says so |
    | 30 | image resolution | XML first, page scraping fallback; only new posts reach it (dedup skipped the rest) |
    | 40 | LLM tagging (JEV / OpenAI-compatible) | reserved slot, optional per instance, v2.x — `FailurePolicy = ContinueDegraded` when implemented |
@@ -25,7 +25,7 @@ How a post flows through the system:
 
    A stage may set `ctx.Skip = true` to stop processing of that item; every stage declares a `FailurePolicy` (`IsolateItem` by default, `ContinueDegraded` only for optional enrichment). The runner orders stages by `Order`, checks `Skip` after each stage, and applies the per-stage policy on failure.
 4. **Delivery** — a per-instance bounded `Channel<T>` queue + single-reader **target-agnostic** worker dispatches to the instance's `INotificationTarget`. The worker owns the retry policy: exponential backoff with jitter, honoring `Retry-After` (header or body) on HTTP 429, max attempts → persistent dead-letter. Adding a new target never touches the worker.
-5. **State** — delivery is confirmed **only after** the target answers HTTP 204 (`Delivered`): an atomic EF Core transaction marks the item delivered and advances feed state in one commit. Semantics are **at-least-once**: a crash between send and confirm may produce one duplicate post, never a lost one.
+5. **State** — delivery is confirmed **only after** the target answers HTTP 204 (`Delivered`): an atomic EF Core transaction marks the item delivered (clearing its pending marker) and advances feed state in one commit. Pending markers are wiped wholesale at startup (they always belong to a dead process), preserving at-least-once across crashes. Semantics are **at-least-once**: a crash between send and confirm may produce one duplicate post, never a lost one.
 
 Persistence is **EF Core + SQLite provider (WAL mode)**:
 - one `AppDbContext` per operation, created via `IDbContextFactory<AppDbContext>` — **never** a singleton or shared context;
@@ -40,27 +40,27 @@ For architectural details beyond this overview: refer to the task file assigned 
 
 A development subagent sees **exactly three** sources of truth:
 
-1. This `AGENTS.md`.
-2. Its own task file in `tasks/` (e.g. `tasks/t-024-post-pipeline-runner.md`).
+1. This file (`.github/AGENTS.md`).
+2. Its own task file, kept locally outside the repo (`/home/opencode/workspace/newsquack/tasks/`) and handed over by the coordinator (e.g. `t-024-post-pipeline-runner.md`).
 3. Git history and existing code (`git log`, `git show <commit>`, the working tree).
 
 It must **not know the future**:
 
-- do not read `docs/plan/` (PM-level planning: WBS, milestones, roadmap);
-- do not open other task files in `tasks/`;
+- do not read PM-level planning (WBS, milestones, roadmap);
+- do not open other task files in `/home/opencode/workspace/newsquack/tasks/`;
 - do not assume features, pipeline stages, targets or entities that are not in your own task;
 - if your task references a contract (`Post`, `IPostStage`, `IStateStore`, …), read its current definition in the code — contracts change only through an explicit decision recorded in a commit.
 
 If something you need is missing from your task file, stop and ask the coordinator — do not guess from later milestones.
 
-**Analysis subagents** (planning, review, investigation) instead have full access to the repository and to `~/newsquack-analysis/`.
+**Analysis subagents** (planning, review, investigation) instead have full access to the repository and to the local analysis folder `newsquack-analysis/`, a sibling of the repository clone.
 
 ---
 
 ## 3. Working rules
 
 - **One task at a time.** Never mix changes from two tasks in one branch or one commit.
-- Every task has a **plan + impact assessment + test plan** (see `docs/TASK-TEMPLATE.md`). If scope changed during implementation, update the task file in the same PR that changed the scope.
+- Every task has a **plan + impact assessment + test plan** (see `.github/docs/TASK-TEMPLATE.md`). If scope changed during implementation, update the local task file (outside Git) in the same change that changed the scope — `tasks/` is untracked, so there is no PR-visible copy.
 - **Commits follow Conventional Commits, always in English**, optional scope:
 
   ```
@@ -109,4 +109,4 @@ master  ←  sp/NN  ←  dev branches
 - `sp/01`, `sp/02`, … are **service pack** branches — one per milestone (iteration line v1.x, v2.x). An SP branch is created from `master` at the start of a milestone.
 - Dev branches are named `dev/<sp>-<task-id>-<slug>` (e.g. `dev/sp01-t-024-post-pipeline-runner`), always branched **from their own SP** and merged **back into their own SP** via PR. Never a dev branch directly to master, never cross-SP porting inside a milestone.
 
-Full rules, lifecycle and rationale: `docs/PROCESS.md`.
+Full rules, lifecycle and rationale: `.github/docs/PROCESS.md`.

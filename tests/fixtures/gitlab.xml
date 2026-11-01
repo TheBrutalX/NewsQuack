@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GitLab Atom fixture: project feed with one entry per commit/release — titles like "Commit <sha>",
+     links to the commit page, author name/uri, published/updated. -->
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>acme/payments-service</title>
+  <link href="https://gitlab.example.com/acme/payments-service" rel="alternate" type="text/html"/>
+  <id>tag:gitlab.example.com,2025:acme/payments-service</id>
+  <updated>2025-10-21T16:40:07Z</updated>
+  <entry>
+    <title>Commit a3f8c9d2e4b1 — Fix idempotency key collision on retries</title>
+    <link href="https://gitlab.example.com/acme/payments-service/-/commit/a3f8c9d2e4b1" rel="alternate" type="text/html"/>
+    <id>tag:gitlab.example.com,2025:acme/payments-service/commit/a3f8c9d2e4b1</id>
+    <published>2025-10-21T16:40:07Z</published>
+    <updated>2025-10-21T16:40:07Z</updated>
+    <author>
+      <name>Dana Whitfield</name>
+      <uri>https://gitlab.example.com/dwhitfield</uri>
+    </author>
+  </entry>
+  <entry>
+    <title>Release v2025.10.1</title>
+    <link href="https://gitlab.example.com/acme/payments-service/-/releases/v2025.10.1" rel="alternate" type="text/html"/>
+    <id>tag:gitlab.example.com,2025:acme/payments-service/release/v2025.10.1</id>
+    <published>2025-10-20T18:15:33Z</published>
+    <updated>2025-10-20T18:15:33Z</updated>
+    <author>
+      <name>Dana Whitfield</name>
+      <uri>https://gitlab.example.com/dwhitfield</uri>
+    </author>
+  </entry>
+  <entry>
+    <title>Commit 7b2e4f0a9c31 — Add circuit breaker around the PSP client</title>
+    <link href="https://gitlab.example.com/acme/payments-service/-/commit/7b2e4f0a9c31" rel="alternate" type="text/html"/>
+    <id>tag:gitlab.example.com,2025:acme/payments-service/commit/7b2e4f0a9c31</id>
+    <published>2025-10-19T11:02:56Z</published>
+    <updated>2025-10-19T11:02:56Z</updated>
+    <author>
+      <name>Omar Haddad</name>
+      <uri>https://gitlab.example.com/ohaddad</uri>
+    </author>
+  </entry>
+</feed>

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- T-030: Kestrel + minimal APIs for the health endpoints (Health.Enabled=true path). The ASP.NET Core shared framework also
+         provides the generic host, so no Microsoft.Extensions.Hosting package reference is needed anymore. Consequence: the runtime
+         Docker image must be dotnet/aspnet (the ASP.NET Core shared framework) — see the repo-root Dockerfile. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- T-012: primary feed parser (ReadFromString). Version centralized in Directory.Packages.props. -->
+    <PackageReference Include="CodeHollow.FeedReader" />
+
+    <!-- T-054: Serilog as the host's logging provider — frozen T-004 JSON line on stdout via a custom ITextFormatter,
+         Logging.Level mapped to the Serilog minimum, EF Core capped at Warning unless the global level is Debug/Trace. -->
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../NewsQuack.Core/NewsQuack.Core.csproj" />
+    <ProjectReference Include="../NewsQuack.Infrastructure/NewsQuack.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

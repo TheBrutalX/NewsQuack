@@ -1,0 +1,34 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- EF Core packages live in NewsQuack.Infrastructure only; versions are centralized here. -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13" />
+
+    <!-- T-012: feed XML parsing (primary pass). Zero transitive dependencies on netcoreapp — coordinator decision 1 kept
+         CodeHollow over the Sagara fork precisely to avoid adding an HTTP resilience layer that overlaps our own design. -->
+    <PackageVersion Include="CodeHollow.FeedReader" Version="1.2.6" />
+
+    <!-- T-054: Serilog as the host's logging provider (frozen T-004 JSON line shape via a custom ITextFormatter).
+          Referenced from NewsQuack.App only; latest stable on nuget.org as of 2026-10-26, no prerelease. -->
+    <PackageVersion Include="Serilog" Version="4.4.0" />
+    <PackageVersion Include="Serilog.Extensions.Hosting" Version="10.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
+
+    <!-- Test tooling (xUnit v2 + VSTest). -->
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+
+    <!-- HTTP-level test wiring (self-hosted mock server on dynamic ports). -->
+    <PackageVersion Include="WireMock.Net" Version="2.19.0" />
+
+    <!-- Coverage: coverlet.collector is the VSTest data collector; coverlet.msbuild emits the report and
+         enforces the per-project Threshold on every `dotnet test` (same version line for both). -->
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
+    <PackageVersion Include="coverlet.msbuild" Version="10.1.0" />
+  </ItemGroup>
+</Project>

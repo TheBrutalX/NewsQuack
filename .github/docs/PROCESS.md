@@ -1,6 +1,6 @@
 # PROCESS — Development Process
 
-This document is the **complete** definition of how Newsquack is developed: branch model, task lifecycle, GitHub tracking, subagent access rules and commit conventions. `AGENTS.md` at the repo root carries a binding summary for development subagents; when in doubt about *why* a rule exists, read this document.
+This document is the **complete** definition of how NewsQuack is developed: branch model, task lifecycle, GitHub tracking, subagent access rules and commit conventions. `.github/AGENTS.md` carries a binding summary for development subagents; when in doubt about *why* a rule exists, read this document.
 
 ---
 
@@ -42,22 +42,22 @@ Full flow in one line: **Main → Sp** (SP created from master at milestone star
 
 ```mermaid
 flowchart LR
-    A["Planning — tasks/t-xxx-slug.md written from docs/TASK-TEMPLATE.md (goal / context / impact / tests)"] --> B["Execution — one dev branch per task, branched from its SP"]
+    A["Planning — local, unversioned tasks/t-xxx-slug.md written from .github/docs/TASK-TEMPLATE.md (goal / context / impact / tests)"] --> B["Execution — one dev branch per task, branched from its SP"]
     B --> C["Testing — unit + integration tests green locally, coverage thresholds held"]
     C --> D["PR dev → SP with pull_request_template checklist filled in"]
     D -- "review: CI green + checklist ok" --> E["Merge (squash) into SP; issue closed via Closes #n"]
     D -- "changes requested" --> B
 ```
 
-1. **Planning.** The coordinator writes `tasks/t-<nnn>-<slug>.md` from `docs/TASK-TEMPLATE.md`: goal, context (only what the dev needs), impact assessment, implementation notes, test plan, definition of done. A GitHub issue is opened mirroring the task (section 3).
-2. **Execution.** One dev branch per task (`dev/<sp>-<task-id>-<slug>`). The development subagent works with *only* `AGENTS.md` + its task file + git history (section 4).
+1. **Planning.** The coordinator writes the local, unversioned task file `/home/opencode/workspace/newsquack/tasks/t-<nnn>-<slug>.md` from `.github/docs/TASK-TEMPLATE.md`: goal, context (only what the dev needs), impact assessment, implementation notes, test plan, definition of done. A GitHub issue is opened mirroring the task (section 3).
+2. **Execution.** One dev branch per task (`dev/<sp>-<task-id>-<slug>`). The development subagent works with *only* `.github/AGENTS.md` + its task file (handed over by the coordinator) + git history (section 4).
 3. **Testing.** Every task ships tests; the PR must show what was added and how to run it.
 4. **PR dev → SP.** Uses `.github/pull_request_template.md`; the PR body's `Closes #<issue>` closes the task issue on merge.
 5. **Merge & close.** Squash-merge into the SP; the issue auto-closes; the task file is marked done (checkboxes in its Definition of Done).
 
 ### Plans can change — traceability rule
 
-A task's plan may legitimately change in a later milestone (e.g. a v1.0 task reworked for v2.x). When that happens, **the task file is updated in the very commit that changes the scope** — never silently. Git history then answers "what did we think at the time" (`git log -p -- tasks/t-xxx-slug.md`). This keeps planning documents honest without a separate changelog.
+A task's plan may legitimately change in a later milestone (e.g. a v1.0 task reworked for v2.x). When that happens, **the local task file is updated in the same change that changes the scope** — never silently. Task files live outside Git, so there is no version history to fall back on: keeping them current *is* the traceability, and it keeps planning documents honest without a separate changelog.
 
 ---
 
@@ -76,8 +76,8 @@ A task's plan may legitimately change in a later milestone (e.g. a v1.0 task rew
 
 | Subagent kind | Access | Why |
 |---|---|---|
-| **Analysis** (planning, review, investigation) | Full repo + `~/newsquack-analysis/` (original project analysis, PM plan, issues) | They must see the whole picture to plan and review correctly. |
-| **Development** | Only: `AGENTS.md` + its own task file in `tasks/` + git history & existing code (`git log`, `git show`) | Two reasons: **(1) no future-info leakage** — knowing what comes next (reserved pipeline slots, planned targets, later milestones) tempts a dev subagent to build for the future and bloat the diff; **(2) focused diffs** — with only its task in view, changes stay inside the task's impact radius, which is what makes small PRs reviewable and merge conflicts rare. |
+| **Analysis** (planning, review, investigation) | Full repo + `newsquack-analysis/` (local analysis folder next to the repository clone: project analysis, PM plan, issues) | They must see the whole picture to plan and review correctly. |
+| **Development** | Only: `.github/AGENTS.md` + its own task file (local, outside the repo — handed over by the coordinator) + git history & existing code (`git log`, `git show`) | Two reasons: **(1) no future-info leakage** — knowing what comes next (reserved pipeline slots, planned targets, later milestones) tempts a dev subagent to build for the future and bloat the diff; **(2) focused diffs** — with only its task in view, changes stay inside the task's impact radius, which is what makes small PRs reviewable and merge conflicts rare. |
 
 Consequences: contracts (`Post`, `IPostStage`, `INotificationTarget`, `IStateStore`, …) are read from **code**, not from planning docs; anything missing from a task file is a question to the coordinator, never an assumption.
 

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- RSS 2.0 fixture (T-055): one item whose <description> is the canonical cvefeed.io sample — labelled sections separated by
+     <br /> tags and literal newlines, XML-escaped exactly as a real feed carries them (one decode level). -->
+<rss version="2.0">
+  <channel>
+    <title>CVE Feed</title>
+    <link>https://cvefeed.example/</link>
+    <description>A sample RSS 2.0 feed whose item description preserves multi-section line structure.</description>
+    <language>en-us</language>
+    <lastBuildDate>Tue, 21 Oct 2025 16:42:10 -0700</lastBuildDate>
+    <item>
+      <title>CVE-2026-78674 — BPMN System REST APIs access control bypass</title>
+      <link>https://cvefeed.example/cve/CVE-2026-78674</link>
+      <guid isPermaLink="true">https://cvefeed.example/cve/CVE-2026-78674</guid>
+      <pubDate>Tue, 21 Oct 2025 16:42:10 -0700</pubDate>
+      <description>
+  &lt;strong&gt;CVE ID :&lt;/strong&gt;CVE-2026-78674
+  &lt;br /&gt;
+  &lt;strong&gt;Published :&lt;/strong&gt; Mercoledì 28 Ottobre 2026 19:21 | 28 minuti ago
+  &lt;br /&gt;
+  &lt;strong&gt;Description :&lt;/strong&gt;The BPMN System REST APIs allow an attacker to bypass access controls.
+
+An authenticated user can leverage this flaw to read arbitrary data.
+--
+  Visit the link for more details about this vulnerability.</description>
+    </item>
+  </channel>
+</rss>

@@ -4,7 +4,7 @@ Closes #<!-- issue number of this task -->
 
 ## Summary
 
-<!-- What this PR does and why, in a few sentences. Reference the task file (tasks/t-xxx-….md). -->
+<!-- What this PR does and why, in a few sentences. Reference the task file (local tasks/t-xxx-….md — outside Git). -->
 
 ## Impact & risk assessment
 
@@ -27,7 +27,7 @@ Closes #<!-- issue number of this task -->
 
 - [ ] Commits follow Conventional Commits and are written in English
 - [ ] One commit = one complete, tested logical unit (no WIP commits)
-- [ ] Task plan updated in the same PR if scope changed during implementation
+- [ ] Local task file (outside Git) updated in the same change if scope changed during implementation
 - [ ] No changes outside the task scope (no drive-by refactors, no unrelated formatting)
 - [ ] `dotnet build -c Release --warn-as-error` and `dotnet test` are green locally
 - [ ] Coverage thresholds not degraded (core ≥ 90%, Core ≥ 80%, Infrastructure ≥ 70%)

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- YouTube channel RSS fixture: the exact shape YouTube serves — xmlns:yt + media namespaces,
+     per-item <media:group> with title/description/community/statistics/thumbnail, yt:videoId,
+     tag-style GUIDs and UTC (+0000) pubDate values. -->
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:yt="http://www.youtube.com/xml/schemas/2015">
+  <channel>
+    <title>Maker's Bench</title>
+    <link>https://www.youtube.com/channel/UCd9fKqLmNpRsTuVwXyZaBcD?app=desktop</link>
+    <description>Workshops, tool reviews &amp; build logs from the maker bench.</description>
+    <language>en-US</language>
+    <lastBuildDate>Tue, 21 Oct 2025 16:42:10 +0000</lastBuildDate>
+    <ttl>5</ttl>
+    <yt:playlistId>UUCd9fKqLmNpRsTuVwXyZaBcD</yt:playlistId>
+    <media:community>
+      <media:starRating count="1243" average="4.8" min="1" max="5"/>
+      <media:statistics views="187654"/>
+    </media:community>
+    <item>
+      <title>CNC router build log #12 — gantry &amp; rails</title>
+      <link>https://www.youtube.com/watch?v=aB3dE5fGh7i</link>
+      <guid isPermaLink="false">tag:youtube.com,2016:video:aB3dE5fGh7i</guid>
+      <pubDate>Tue, 21 Oct 2025 16:42:10 +0000</pubDate>
+      <description>Gantry squareness checks, rail mounting &amp; the first axis move. Full parts list in the description.</description>
+      <media:group>
+        <media:title>CNC router build log #12 — gantry &amp; rails</media:title>
+        <media:description>Gantry squareness checks, rail mounting &amp; the first axis move.</media:description>
+        <media:community>
+          <media:starRating count="42" average="5.0" min="1" max="5"/>
+          <media:statistics views="3891"/>
+        </media:community>
+        <media:thumbnail url="https://i.ytimg.com/vi/aB3dE5fGh7i/hqdefault.jpg" width="480" height="360"/>
+      </media:group>
+      <yt:videoId>aB3dE5fGh7i</yt:videoId>
+    </item>
+    <item>
+      <title>Soldering fume extraction on a budget</title>
+      <link>https://www.youtube.com/watch?v=jK9mL2nOp4q</link>
+      <guid isPermaLink="false">tag:youtube.com,2016:video:jK9mL2nOp4q</guid>
+      <pubDate>Sun, 19 Oct 2025 18:05:33 +0000</pubDate>
+      <description>A $30 fume extractor that actually works — build files &amp; airflow measurements inside.</description>
+      <media:group>
+        <media:title>Soldering fume extraction on a budget</media:title>
+        <media:description>A $30 fume extractor that actually works — build files &amp; airflow measurements.</media:description>
+        <media:community>
+          <media:starRating count="156" average="4.9" min="1" max="5"/>
+          <media:statistics views="20437"/>
+        </media:community>
+        <media:thumbnail url="https://i.ytimg.com/vi/jK9mL2nOp4q/hqdefault.jpg" width="480" height="360"/>
+      </media:group>
+      <yt:videoId>jK9mL2nOp4q</yt:videoId>
+    </item>
+    <item>
+      <title>Why my first 3D printer frame failed (and the fix)</title>
+      <link>https://www.youtube.com/watch?v=rSt6uVwXyZ8</link>
+      <guid isPermaLink="false">tag:youtube.com,2016:video:rSt6uVwXyZ8</guid>
+      <pubDate>Fri, 17 Oct 2025 12:30:00 +0000</pubDate>
+      <description>Rigid does not mean stiff. Modal analysis of the old frame &amp; the redesigned X carriage.</description>
+      <media:group>
+        <media:title>Why my first 3D printer frame failed (and the fix)</media:title>
+        <media:description>Rigid does not mean stiff. Modal analysis of the old frame &amp; the redesigned X carriage.</media:description>
+        <media:community>
+          <media:starRating count="89" average="4.7" min="1" max="5"/>
+          <media:statistics views="12076"/>
+        </media:community>
+        <media:thumbnail url="https://i.ytimg.com/vi/rSt6uVwXyZ8/hqdefault.jpg" width="480" height="360"/>
+      </media:group>
+      <yt:videoId>rSt6uVwXyZ8</yt:videoId>
+    </item>
+  </channel>
+</rss>

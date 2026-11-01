@@ -1,5 +1,5 @@
 # =============================================================================
-# Newsquack — .NET 10 / C# / Docker / WSL+Windows
+# NewsQuack — .NET 10 / C# / Docker / WSL+Windows
 # =============================================================================
 
 # ── Build output ───────────────────────────────────────────────────────────────
@@ -40,6 +40,10 @@ data/
 # appsettings.json is the documented, secret-free base (committed).
 # Per-machine overrides — webhook tokens, API keys — go in *.local.json files.
 appsettings.*.local.json
+
+# ── Task files (local-only) ────────────────────────────────────────────────────
+# Task files are local-only (coordinator planning), not versioned
+/tasks/
 
 # ── Publish artifacts ──────────────────────────────────────────────────────────
 publish/
