@@ -37,7 +37,8 @@
 
 …
 
-See [README.md](../README.md) for the complete configuration reference and environment-variable table.
+<!-- Use an ABSOLUTE GitHub URL here (not a relative path): this file also renders as the GitHub Release notes, where relative links do not resolve. -->
+See the [README](https://github.com/TheBrutalX/NewsQuack/blob/master/README.md) for the complete configuration reference and environment-variable table.
 
 ## Upgrade notes
 
