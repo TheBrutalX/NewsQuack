@@ -22,7 +22,7 @@ NewsQuack runs as a single Docker container in **multi-instance mode**: one conf
 
 ## Quick start (Docker)
 
-The image is published to GitHub Container Registry as `ghcr.io/thebrutalx/newsquack` (multi-arch: `linux/amd64`, `linux/arm64`), tagged per release — pin a versioned tag such as `v1.0`. While the repository is private, the package is too: run `docker login ghcr.io` with a GitHub token that has read access to packages before pulling.
+The image is published to GitHub Container Registry as `ghcr.io/thebrutalx/newsquack` (multi-arch: `linux/amd64`, `linux/arm64`). Every release is published under its version tag (`v1.0`, …) and also as `latest`, which always points to the newest release — pin a versioned tag in production, use `latest` to follow releases.
 
 ```bash
 docker run -d \
@@ -32,7 +32,22 @@ docker run -d \
   ghcr.io/thebrutalx/newsquack:v1.0
 ```
 
-- The config file is mounted at `/config/newsquack.json` — see [Configuration](#configuration) for a full example and the key reference. To keep the webhook URL out of the file, pass it in the environment instead: `-e NEWSQUACK_INSTANCES__0__DISCORD__WEBHOOKURL="https://discord.com/api/webhooks/…"` (env vars always win over the config file).
+The same setup as a `docker-compose.yml` — start it with `docker compose up -d`. The notes below apply to both forms.
+
+```yaml
+services:
+  newsquack:
+    image: ghcr.io/thebrutalx/newsquack:v1.0
+    container_name: newsquack
+    volumes:
+      - /host/path/newsquack.json:/config/newsquack.json
+      - newsquack-data:/data
+
+volumes:
+  newsquack-data:
+```
+
+- The config file is mounted at `/config/newsquack.json` — see [Configuration](#configuration) for a full example and the key reference. To keep the webhook URL out of the file, pass it in the environment instead: `-e NEWSQUACK_INSTANCES__0__DISCORD__WEBHOOKURL="https://discord.com/api/webhooks/…"` (in Compose, an entry under `environment:`; env vars always win over the config file).
 - `/data` holds the SQLite state database (delivered-item records, feed error counters, dead letters). Keep this volume across upgrades.
 - The health listener runs inside the container on port 8081 by default (plain HTTP, no TLS or auth — it is meant for orchestrators and reverse proxies). Publish it with `-p 8081:8081` if you need to reach it from outside, or disable it with `health.enabled = false`.
 
