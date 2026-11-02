@@ -92,7 +92,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Multi-arch image, GHCR only, tagged with the tag name itself (no `latest` in the v1.0 phase).
+      # Multi-arch image, GHCR only. Every release is published under its version tag and as `latest` (always the newest release).
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
         with:
@@ -102,3 +102,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/thebrutalx/newsquack:${{ github.ref_name }}
+            ghcr.io/thebrutalx/newsquack:latest
