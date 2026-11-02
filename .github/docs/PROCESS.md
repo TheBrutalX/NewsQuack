@@ -36,6 +36,8 @@ flowchart LR
 
 Full flow in one line: **Main → Sp** (SP created from master at milestone start) · **Sp → Dev** (branch per task) · **Dev → Sp** (PR that closes the task issue) · **Sp → Main** (release PR when the milestone is done).
 
+Release summaries for SP → master merges follow `.github/RELEASE-SUMMARY.md` (template: `.github/release_summary_template.md`, output: `docs/releases/vX.Y.md`).
+
 ---
 
 ## 2. Task lifecycle
